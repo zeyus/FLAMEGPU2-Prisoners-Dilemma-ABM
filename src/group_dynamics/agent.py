@@ -1,4 +1,5 @@
 # Define FLAME GPU Agent functions as strings
+import logging
 import pyflamegpu
 import random
 from .config import *
@@ -77,12 +78,15 @@ class step_validation(pyflamegpu.HostFunctionCallback):
 
 
 def create_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescription:
-    agent = model.newAgent(AGENT_NAME)
+    agent: pyflamegpu.AgentDescription = model.newAgent(AGENT_NAME)
     agent.newVariableInt('id')
     agent.newVariableFloat('x')
     agent.newVariableFloat('y')
     # add z to jitter agents
     agent.newVariableFloat('z')
+    agent.newVariableFloat('roll')
+    # this should be int but it is a float so it can be used for agent color
+    agent.newVariableFloat('group_id')
     for i in range(AGENT_ATTRIBUTE_COUNT):
         agent.newVariableFloat(f'attribute{i}')
     agent.newVariableFloat('drift')  # Store the distance moved here, for validation
@@ -115,10 +119,13 @@ def create_environment(model: pyflamegpu.ModelDescription) -> pyflamegpu.Environ
 
 def populate_simulation(simulation: pyflamegpu.CUDASimulation, agent: pyflamegpu.AgentDescription):
     import numpy as np
-    import sklearn.cluster as cluster
+    
     def cluster_agents_by_attributes(attributes: np.ndarray) -> np.ndarray:
+        import sklearn.cluster as cluster
         info('Clustering agents by attributes')
-        return cluster.KMeans(n_clusters=GROUP_COUNT).fit(attributes).cluster_centers_, cluster.KMeans(n_clusters=GROUP_COUNT).fit(attributes).labels_
+        clusters = cluster.MiniBatchKMeans(n_clusters=GROUP_COUNT).fit(attributes)
+        info(f'Clustered agents into {GROUP_COUNT} groups')
+        return clusters.cluster_centers_, clusters.labels_
         
     # Generate a population if an initial states file is not provided
     if not simulation.SimulationConfig().input_file:
@@ -126,16 +133,30 @@ def populate_simulation(simulation: pyflamegpu.CUDASimulation, agent: pyflamegpu
         random.seed(simulation.SimulationConfig().random_seed)
         # Generate a vector of agents
         population = pyflamegpu.AgentVector(agent, AGENT_COUNT)
+        # temporarily save attributes for clustering
+        agent_attributes = np.zeros((AGENT_COUNT, AGENT_ATTRIBUTE_COUNT))
+        for i in range(AGENT_COUNT):
+            for j in range(AGENT_ATTRIBUTE_COUNT):
+                agent_attributes[i, j] = AGENT_PROPERTIES['attributes']['func'](*AGENT_PROPERTIES['attributes']['args'])
+        group_centers, agent_group_labels = cluster_agents_by_attributes(agent_attributes)
+        logging.info('Group centers: {}, n_labels: {}'.format(len(group_centers), len(agent_group_labels)))
         # Iterate the population, initialising per-agent values
+        instance: pyflamegpu.AgentVector_Agent
         for i, instance in enumerate(population):
             # uniformly distribute agents across the environment
             instance.setVariableFloat('x', random.uniform(0.0, ENV_MAX))
             instance.setVariableFloat('y', random.uniform(0.0, ENV_MAX))
             # jitter agents above z
             instance.setVariableFloat('z', random.uniform(0.0, 5.0))
-            for i in range(AGENT_ATTRIBUTE_COUNT):
-                instance.setVariableFloat(f'attribute{i}',
-                    AGENT_PROPERTIES['attributes']['func'](*AGENT_PROPERTIES['attributes']['args']))
+            instance.setVariableFloat('roll', AGENT_ROLL)
+            for j in range(AGENT_ATTRIBUTE_COUNT):
+                instance.setVariableFloat(f'attribute{j}', agent_attributes[i, j])
+            # get the group id from the labels
+            instance.setVariableFloat('group_id', float(agent_group_labels[i].item()))
+
+        
+        del agent_attributes
+        
         # Set the population for the simulation object
         simulation.setPopulationData(population)
-    del cluster
+    del np

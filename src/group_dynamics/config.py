@@ -10,10 +10,10 @@ import random
 MODEL_NAME: str = 'uncert_ext'
 
 # total number of agents to create
-AGENT_COUNT: int = 10000
+AGENT_COUNT: int = 5000
 
 # how long the simulation should run
-STEP_COUNT: int = 100000
+STEP_COUNT: int = 10000
 
 # manually specify the random seed
 RANDOM_SEED: int = 69420
@@ -45,17 +45,18 @@ MESSAGE_RADIUS: float = ENV_MAX / 16
 ###
 # groups
 ###
+GROUP_AVG_MEMBERS: int = 15
 # how many groups to model
-GROUP_COUNT: int = 1000
+GROUP_COUNT: int = AGENT_COUNT // GROUP_AVG_MEMBERS
 # various properties attached to groups
 GROUP_PROPERTIES: dict = {
     # how open / closed is the group
     'openness': {
-        'func': random.normalvariate,
+        'func': random.gauss,
         'args': (0.0, 1.0),
     },
     'prototye_attributes': {
-        'func': random.normalvariate,
+        'func': random.gauss,
         'args': (0.0, 1.0),
     },
 }
@@ -75,13 +76,13 @@ MOVE_FUNC: str = 'move'
 AGENT_ATTRIBUTE_COUNT: int = 3
 # various properties attached to groups
 AGENT_PROPERTIES: dict = {
-    # how open / closed is the group
-    'openness': {
-        'func': random.normalvariate,
-        'args': (0.0, 1.0),
-    },
+    # how open / closed is the agent
+    # 'openness': {
+    #     'func': random.normalvariate,
+    #     'args': (0.0, 1.0),
+    # },
     'attributes': {
-        'func': random.normalvariate,
+        'func': random.gauss,
         'args': (0.0, 1.0),
     },
 }
@@ -91,8 +92,12 @@ AGENT_SCALE: float = [5] #(2.0, 2.0, 2.0)
 # cubes are only 12 polygons
 AGENT_3D_MODEL: str = './src/resources/models/primitive_pyramid_arrow.obj'
 # agent starting colors - can be static, from a palette, or based on a variable
-AGENT_COLOR = pyflamegpu.ViridisInterpolation("attribute1")
-
+# i think if it's based on a variable it's dynamic during the sim
+# need to confirm it
+AGENT_COLOR = pyflamegpu.ViridisInterpolation("group_id", 0, GROUP_COUNT - 1)
+#AGENT_COLOR = pyflamegpu.ViridisInterpolation("x", 50, 1850)
+# agent rotation
+AGENT_ROLL: float = math.pi / 2
 
 ###
 # visualisation

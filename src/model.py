@@ -5,7 +5,7 @@ Implementation of the Circles FLAME GPU model in python, as an example.
 import pyflamegpu
 
 # Import standard python libs that are used
-import sys, random, math
+import sys, math
 
 from group_dynamics import config
 from group_dynamics.agent import step_validation, create_agent, create_environment, populate_simulation
@@ -62,6 +62,7 @@ def main():
         # Set the model to use, and scale it.
         vis_agent.setModel(config.AGENT_3D_MODEL)
         vis_agent.setModelScale(*config.AGENT_SCALE)
+        vis_agent.setRollVariable("roll")
         vis_agent.setColor(config.AGENT_COLOR)
         # Optionally render the Subdivision of spatial messaging
         ENV_MIN = 0
@@ -110,4 +111,6 @@ def main():
 
 # If this python script is the entry point, execute the main method
 if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.INFO)
     main()
