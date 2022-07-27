@@ -3,78 +3,27 @@ import logging
 import pyflamegpu
 import random
 from .config import *
-from logging import info
 
-# Agent Function to output the agents ID and position in to a 2D spatial message list
-output_message_local: str = rf'''
-FLAMEGPU_AGENT_FUNCTION({LOCAL_MESSAGE_FUNC}, flamegpu::MessageNone, flamegpu::MessageSpatial2D) {{
-    FLAMEGPU->message_out.setVariable<flamegpu::id_t>("id", FLAMEGPU->getID());
-    FLAMEGPU->message_out.setLocation(
-        FLAMEGPU->getVariable<float>("x"),
-        FLAMEGPU->getVariable<float>("y")
-    );
-    return flamegpu::ALIVE;
-}}
-'''
+# # A Callback host function, to check the progress of the model / validate the model.
+# class step_validation(pyflamegpu.HostFunctionCallback):
+#     def __init__(self) -> None:
+#         super().__init__()
+#         # Static variables?
+#         self.prevTotalDrift = 3.402823e+38 # @todo - static
+#         self.driftDropped = 0 # @todo - static
+#         self.driftIncreased = 0 # @todo - static
 
-# Agent function to iterate messages, and move according to the rules of the circle model
-move: str = rf'''
-FLAMEGPU_AGENT_FUNCTION({MOVE_FUNC}, flamegpu::MessageSpatial2D, flamegpu::MessageNone) {{
-    const flamegpu::id_t ID = FLAMEGPU->getID();
-    const float REPULSE_FACTOR = FLAMEGPU->environment.getProperty<float>("repulse");
-    const float RADIUS = FLAMEGPU->message_in.radius();
-    float fx = 0.0;
-    float fy = 0.0;
-    const float x1 = FLAMEGPU->getVariable<float>("x");
-    const float y1 = FLAMEGPU->getVariable<float>("y");
-    int count = 0;
-    for (const auto &message : FLAMEGPU->message_in(x1, y1)) {{
-        if (message.getVariable<flamegpu::id_t>("id") != ID) {{
-            const float x2 = message.getVariable<float>("x");
-            const float y2 = message.getVariable<float>("y");
-            float x21 = x2 - x1;
-            float y21 = y2 - y1;
-            const float separation = sqrt(x21*x21 + y21*y21);
-            if (separation < RADIUS && separation > 0.0f) {{
-                float k = sinf((separation / RADIUS)*3.141*-2)*REPULSE_FACTOR;
-                // Normalise without recalculating separation
-                x21 /= separation;
-                y21 /= separation;
-                fx += k * x21;
-                fy += k * y21;
-                count++;
-            }}
-        }}
-    }}
-    fx /= count > 0 ? count : 1;
-    fy /= count > 0 ? count : 1;
-    FLAMEGPU->setVariable<float>("x", x1 + fx);
-    FLAMEGPU->setVariable<float>("y", y1 + fy);
-    FLAMEGPU->setVariable<float>("drift", sqrt(fx*fx + fy*fy));
-    return flamegpu::ALIVE;
-}}
-'''
-
-# A Callback host function, to check the progress of the model / validate the model.
-
-class step_validation(pyflamegpu.HostFunctionCallback):
-    def __init__(self) -> None:
-        super().__init__()
-        # Static variables?
-        self.prevTotalDrift = 3.402823e+38 # @todo - static
-        self.driftDropped = 0 # @todo - static
-        self.driftIncreased = 0 # @todo - static
-
-    def run(self, FLAMEGPU) -> None:
-        # This value should decline? as the model moves towards a steady equilibrium state
-        # Once an equilibrium state is reached, it is likely to oscillate between 2-4? values
-        totalDrift = FLAMEGPU.agent(AGENT_NAME).sumFloat('drift')
-        if totalDrift <= self.prevTotalDrift:
-            self.driftDropped += 1
-        else:
-            self.driftIncreased += 1
-        self.prevTotalDrift = totalDrift
-        # print('{:.2f} Drift correct'.format(100 * self.driftDropped / float(self.driftDropped + self.driftIncreased)))
+#     def run(self, FLAMEGPU) -> None:
+#         # This value should decline? as the model moves towards a steady equilibrium state
+#         # Once an equilibrium state is reached, it is likely to oscillate between 2-4? values
+#         # totalDrift = FLAMEGPU.agent(AGENT_NAME).sumFloat('drift')
+#         # if totalDrift <= self.prevTotalDrift:
+#         #     self.driftDropped += 1
+#         # else:
+#         #     self.driftIncreased += 1
+#         # self.prevTotalDrift = totalDrift
+#         # print('{:.2f} Drift correct'.format(100 * self.driftDropped / float(self.driftDropped + self.driftIncreased)))
+#         pass
 
 
 def create_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescription:
@@ -90,8 +39,9 @@ def create_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescript
     for i in range(AGENT_ATTRIBUTE_COUNT):
         agent.newVariableFloat(f'attribute{i}')
     agent.newVariableFloat('drift')  # Store the distance moved here, for validation
-    agent.newRTCFunction(LOCAL_MESSAGE_FUNC, output_message_local).setMessageOutput('location')
-    agent.newRTCFunction(MOVE_FUNC, move).setMessageInput('location')
+    logging.info(get_cuda_file_path(LOCAL_MESSAGE_FUNC))
+    agent.newRTCFunctionFile(LOCAL_MESSAGE_FUNC, get_cuda_file_path(LOCAL_MESSAGE_FUNC)).setMessageOutput('location')
+    agent.newRTCFunctionFile(MOVE_FUNC, get_cuda_file_path(MOVE_FUNC)).setMessageInput('location')
     return agent
 
 def create_group(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescription:
@@ -108,7 +58,7 @@ def create_group(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescript
 def create_environment(model: pyflamegpu.ModelDescription) -> pyflamegpu.EnvironmentDescription:
     env = model.Environment()
     env.newPropertyFloat('uncertainty', BASELINE_UNCERTAINTY)
-    env.newPropertyFloat('repulse', 0.5)
+    env.newPropertyFloat('repulse', 25.0)
     # for i in range(AGENT_ATTRIBUTE_COUNT):
     #    # for each attribute, use the prototye attribute function to create a new property
     #    # this gives us a range of groups with various prototypical attributes.
@@ -122,9 +72,9 @@ def populate_simulation(simulation: pyflamegpu.CUDASimulation, agent: pyflamegpu
     
     def cluster_agents_by_attributes(attributes: np.ndarray) -> np.ndarray:
         import sklearn.cluster as cluster
-        info('Clustering agents by attributes')
+        logging.info('Clustering agents by attributes')
         clusters = cluster.MiniBatchKMeans(n_clusters=GROUP_COUNT).fit(attributes)
-        info(f'Clustered agents into {GROUP_COUNT} groups')
+        logging.info(f'Clustered agents into {GROUP_COUNT} groups')
         return clusters.cluster_centers_, clusters.labels_
         
     # Generate a population if an initial states file is not provided
@@ -138,8 +88,8 @@ def populate_simulation(simulation: pyflamegpu.CUDASimulation, agent: pyflamegpu
         for i in range(AGENT_COUNT):
             for j in range(AGENT_ATTRIBUTE_COUNT):
                 agent_attributes[i, j] = AGENT_PROPERTIES['attributes']['func'](*AGENT_PROPERTIES['attributes']['args'])
-        group_centers, agent_group_labels = cluster_agents_by_attributes(agent_attributes)
-        logging.info('Group centers: {}, n_labels: {}'.format(len(group_centers), len(agent_group_labels)))
+        # group_centers, agent_group_labels = cluster_agents_by_attributes(agent_attributes)
+        # logging.info('Group centers: {}, n_labels: {}'.format(len(group_centers), len(agent_group_labels)))
         # Iterate the population, initialising per-agent values
         instance: pyflamegpu.AgentVector_Agent
         for i, instance in enumerate(population):
@@ -152,7 +102,8 @@ def populate_simulation(simulation: pyflamegpu.CUDASimulation, agent: pyflamegpu
             for j in range(AGENT_ATTRIBUTE_COUNT):
                 instance.setVariableFloat(f'attribute{j}', agent_attributes[i, j])
             # get the group id from the labels
-            instance.setVariableFloat('group_id', float(agent_group_labels[i].item()))
+            # instance.setVariableFloat('group_id', float(agent_group_labels[i].item()))
+            instance.setVariableFloat('group_id', 0.0)
 
         
         del agent_attributes

@@ -1,19 +1,26 @@
 import math
+from ntpath import join
 import pyflamegpu
 import random
+import os
 
 ###
 # general
 ###
 
+CUDA_AGENT_SRC_DIR = os.sep.join([os.path.dirname(__file__), 'cudasrc'])
+
+def get_cuda_file_path(file_name: str) -> str:
+    return os.sep.join([CUDA_AGENT_SRC_DIR, file_name]) + '.cu'
+
 # Just an ID.
 MODEL_NAME: str = 'uncert_ext'
 
 # total number of agents to create
-AGENT_COUNT: int = 5000
+AGENT_COUNT: int = 10000
 
 # how long the simulation should run
-STEP_COUNT: int = 10000
+STEP_COUNT: int = 5000
 
 # manually specify the random seed
 RANDOM_SEED: int = 69420
@@ -94,10 +101,10 @@ AGENT_3D_MODEL: str = './src/resources/models/primitive_pyramid_arrow.obj'
 # agent starting colors - can be static, from a palette, or based on a variable
 # i think if it's based on a variable it's dynamic during the sim
 # need to confirm it
-AGENT_COLOR = pyflamegpu.ViridisInterpolation("group_id", 0, GROUP_COUNT - 1)
-#AGENT_COLOR = pyflamegpu.ViridisInterpolation("x", 50, 1850)
+#AGENT_COLOR = pyflamegpu.ViridisInterpolation("group_id", 0, GROUP_COUNT - 1)
+AGENT_COLOR = pyflamegpu.ViridisInterpolation("x", 0, ENV_MAX)
 # agent rotation
-AGENT_ROLL: float = math.pi / 2
+AGENT_ROLL: float = 3 * math.pi / 2
 
 ###
 # visualisation

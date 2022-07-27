@@ -1,14 +1,10 @@
-"""
-Implementation of the Circles FLAME GPU model in python, as an example.
-"""
-
 import pyflamegpu
 
 # Import standard python libs that are used
 import sys, math
 
 from group_dynamics import config
-from group_dynamics.agent import step_validation, create_agent, create_environment, populate_simulation
+from group_dynamics.agent import create_agent, create_environment, populate_simulation
 
 # Define a method which when called will define the model, Create the simulation object and execute it.
 def main():
@@ -39,8 +35,9 @@ def main():
     layer2.addAgentFunction(config.AGENT_NAME, config.MOVE_FUNC)
 
     # Add the callback step function to the model.
-    step_validation_fn = step_validation()
-    model.addStepFunctionCallback(step_validation_fn)
+    # no need for host function ATM.
+    # step_validation_fn = step_validation()
+    # model.addStepFunctionCallback(step_validation_fn)
 
     # Create the simulation object.
     simulation = pyflamegpu.CUDASimulation(model)
