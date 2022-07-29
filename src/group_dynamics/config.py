@@ -1,5 +1,4 @@
 import math
-from ntpath import join
 import pyflamegpu
 import random
 import os
@@ -97,7 +96,7 @@ AGENT_NAME: str = 'individual'
 # agent size in units, x, y, z
 AGENT_SCALE: float = [5] #(2.0, 2.0, 2.0)
 # cubes are only 12 polygons
-AGENT_3D_MODEL: str = './src/resources/models/primitive_pyramid_arrow.obj'
+AGENT_3D_MODEL: str = './src/resources/models/plane.obj'
 # agent starting colors - can be static, from a palette, or based on a variable
 # i think if it's based on a variable it's dynamic during the sim
 # need to confirm it
