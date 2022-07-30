@@ -10,7 +10,7 @@ import sys, random, math
 # Define some constants
 RANDOM_SEED: int = 69420
 MAX_AGENT_COUNT: int = 16384
-INIT_AGENT_COUNT: int = 16384
+INIT_AGENT_COUNT: int = 8192
 STEP_COUNT: int = 10000
 VERBOSE_OUTPUT: bool = False
 ENV_MAX: int = math.ceil(math.sqrt(MAX_AGENT_COUNT))
@@ -35,17 +35,27 @@ CUDA_INTERACT_FUNC: str = "interact"
 
 ROLL_RADS_270: float = 3 * math.pi / 2
 AGENT_DEFAULT_SHAPE: str = './src/resources/models/primitive_pyramid.obj'
-AGENT_DEFAULT_SCALE: float = 1 / 10.0
+AGENT_DEFAULT_SCALE: float = 1 / 2.0
 AGENT_STRATEGIES: list = {
   "always_coop": {
     "name": "always_coop",
     "id": 0,
-    "proportion": 0.5,
+    "proportion": 0.25,
   },
   "always_cheat": {
     "name": "always_cheat",
     "id": 1,
-    "proportion": 0.5,
+    "proportion": 0.25,
+  },
+  "tit_for_tat": {
+    "name": "always_cheat",
+    "id": 2,
+    "proportion": 0.25,
+  },
+  "random": {
+    "name": "always_cheat",
+    "id": 3,
+    "proportion": 0.25,
   },
 }
 AGENT_WEIGHTS = [AGENT_STRATEGIES[strategy]["proportion"] for strategy in AGENT_STRATEGIES]
@@ -145,13 +155,18 @@ def main():
     population = pyflamegpu.AgentVector(agent, INIT_AGENT_COUNT)
     # Iterate the population, initialising per-agent values
     instance: pyflamegpu.AgentVector_Agent
+    # randomly create starting position for agents
     import numpy as np
-    grid = np.arange(MAX_AGENT_COUNT)
+    np.random.RandomState(RANDOM_SEED)
+    # initialise grid with id for all possible agents
+    grid = np.arange(MAX_AGENT_COUNT, dtype=np.uint32)
+    # shuffle grid
     np.random.shuffle(grid)
-
+    # reshape it to match the environment size
     grid = np.reshape(grid, (ENV_MAX, ENV_MAX))
-    print(grid)
+    # initialise agents
     for i, instance in enumerate(population):
+      # find agent position in grid
       pos = np.where(grid == i)
       x = pos[0][0].item()
       y = pos[1][0].item()
@@ -160,9 +175,9 @@ def main():
       if USE_VISUALISATION:
         instance.setVariableFloat("x", float(x))
         instance.setVariableFloat("y", float(y))
+      # select agent strategy
       instance.setVariableUInt('agent_strategy', random.choices(AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS)[0])
-    del grid
-    del np
+    del x, y, grid, np
     # Set the population for the simulation object
     simulation.setPopulationData(population)
 
