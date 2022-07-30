@@ -9,7 +9,7 @@ import sys, random, math
 
 # Define some constants
 RANDOM_SEED: int = 69420
-MAX_AGENT_COUNT: int = 16384
+MAX_AGENT_COUNT: int = 16384 # if you change this please change the value in interact.cu
 INIT_AGENT_COUNT: int = MAX_AGENT_COUNT // 4
 STEP_COUNT: int = 10000
 VERBOSE_OUTPUT: bool = False
@@ -78,7 +78,7 @@ def main():
   # Define the location message list
   message: pyflamegpu.MessageArray2D_Description = model.newMessageArray2D("player_search_msg")
   message.newVariableID("id")
-  message.newVariableUInt("agent_strategy")
+  message.newVariableUInt("grid_index")
   # create array to fit all agents
   message.setDimensions(ENV_MAX, ENV_MAX)
 
@@ -87,6 +87,7 @@ def main():
   agent.newVariableUInt("agent_strategy")
   agent.newVariableUInt("x_a")
   agent.newVariableUInt("y_a")
+  agent.newVariableUInt("grid_index")
   agent.newVariableFloat("energy")
   if USE_VISUALISATION:
     agent.newVariableFloat("x")
@@ -97,6 +98,13 @@ def main():
   agent_move_fn: pyflamegpu.AgentFunctionDescription = agent.newRTCFunctionFile(CUDA_INTERACT_FUNC, '.'.join(['/'.join([CUDA_SRC_PATH, CUDA_INTERACT_FUNC]), 'cu']))
   agent_move_fn.setMessageInput("player_search_msg")
   agent_move_fn.setAllowAgentDeath(True)
+
+  # layer spec
+  # 1. Send out search messages
+  # 2. Play with nearby players
+  # 3. Die if energy is too low
+  # 4. conditionally move if haven't played
+  # 5. reproduce if energy is high enough
   
   # Environment properties
   env: pyflamegpu.EnvironmentDescription = model.Environment()
@@ -113,6 +121,9 @@ def main():
   env.newPropertyFloat("reproduce_cost", REPRODUCE_COST)
   env.newPropertyFloat("travel_strategy", AGENT_TRAVEL_STRATEGY)
   env.newPropertyFloat("travel_cost", AGENT_TRAVEL_COST)
+
+  # define playspace
+  env.newMacroPropertyUInt("playspace", MAX_AGENT_COUNT, MAX_AGENT_COUNT)
 
   # Layer #1
   layer1 = model.newLayer()
@@ -180,6 +191,7 @@ def main():
       y = pos[1][0].item()
       instance.setVariableUInt("x_a", int(x))
       instance.setVariableUInt("y_a", int(y))
+      instance.setVariableUInt("grid_index", int(x * ENV_MAX + y))
       if USE_VISUALISATION:
         instance.setVariableFloat("x", float(x))
         instance.setVariableFloat("y", float(y))
