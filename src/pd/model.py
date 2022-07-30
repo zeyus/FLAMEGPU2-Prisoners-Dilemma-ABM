@@ -10,11 +10,10 @@ import sys, random, math
 # Define some constants
 RANDOM_SEED: int = 69420
 MAX_AGENT_COUNT: int = 16384
-INIT_AGENT_COUNT: int = 8192
+INIT_AGENT_COUNT: int = MAX_AGENT_COUNT // 4
 STEP_COUNT: int = 10000
 VERBOSE_OUTPUT: bool = False
 ENV_MAX: int = math.ceil(math.sqrt(MAX_AGENT_COUNT))
-RADIUS: float = 1.0
 USE_VISUALISATION: bool = True
 VISUALISE_COMMUNICATION_GRID = False
 
@@ -22,18 +21,23 @@ VISUALISE_COMMUNICATION_GRID = False
 INIT_COOP_FREQ: float = 0.5
 COST_OF_LIVING: float = 0.5
 PAYOFF_CD: float = -1.0
+MAX_PLAY_DISTANCE: int = 1 # radius of message search grid
 
 REPRODUCE_MIN_ENERGY: float = 100.0
 REPRODUCE_COST: float = 50.0
 PAYOFF_CC: float = 3.0
 PAYOFF_DC: float = 5.0
 MAX_ENERGY: float = 150.0
+MAX_INIT_ENERGY: float = 50.0
 
 CUDA_SRC_PATH: str = "src/pd/cudasrc"
 CUDA_SEARCH_FUNC: str = "search"
 CUDA_INTERACT_FUNC: str = "interact"
 
 ROLL_RADS_270: float = 3 * math.pi / 2
+AGENT_TRAVEL_STRATEGIES: list = ["random"]
+AGENT_TRAVEL_STRATEGY: int = AGENT_TRAVEL_STRATEGIES.index("random")
+AGENT_TRAVEL_COST = 0.0
 AGENT_DEFAULT_SHAPE: str = './src/resources/models/primitive_pyramid.obj'
 AGENT_DEFAULT_SCALE: float = 1 / 2.0
 AGENT_STRATEGIES: list = {
@@ -83,6 +87,7 @@ def main():
   agent.newVariableUInt("agent_strategy")
   agent.newVariableUInt("x_a")
   agent.newVariableUInt("y_a")
+  agent.newVariableFloat("energy")
   if USE_VISUALISATION:
     agent.newVariableFloat("x")
     agent.newVariableFloat("y")
@@ -93,11 +98,12 @@ def main():
   agent_move_fn.setMessageInput("player_search_msg")
   agent_move_fn.setAllowAgentDeath(True)
   
-  
   # Environment properties
   env: pyflamegpu.EnvironmentDescription = model.Environment()
+  env.newPropertyUInt("env_max", ENV_MAX)
   env.newPropertyUInt("max_agents", MAX_AGENT_COUNT)
   env.newPropertyFloat("max_energy", MAX_ENERGY)
+  env.newPropertyUInt("max_play_distance", MAX_PLAY_DISTANCE)
   env.newPropertyFloat("init_coop_freq", INIT_COOP_FREQ)
   env.newPropertyFloat("cost_of_living", COST_OF_LIVING)
   env.newPropertyFloat("payoff_cd", PAYOFF_CD)
@@ -105,8 +111,8 @@ def main():
   env.newPropertyFloat("payoff_dc", PAYOFF_DC)
   env.newPropertyFloat("reproduce_min_energy", REPRODUCE_MIN_ENERGY)
   env.newPropertyFloat("reproduce_cost", REPRODUCE_COST)
-
-
+  env.newPropertyFloat("travel_strategy", AGENT_TRAVEL_STRATEGY)
+  env.newPropertyFloat("travel_cost", AGENT_TRAVEL_COST)
 
   # Layer #1
   layer1 = model.newLayer()
@@ -122,7 +128,7 @@ def main():
     visualisation: pyflamegpu.ModelVis  = simulation.getVisualisation()
     # Configure the visualiastion.
     INIT_CAM = ENV_MAX / 2.0
-    visualisation.setInitialCameraLocation(INIT_CAM, INIT_CAM, 450.0)
+    visualisation.setInitialCameraLocation(INIT_CAM, INIT_CAM, ENV_MAX)
     visualisation.setInitialCameraTarget(INIT_CAM, INIT_CAM, 0.0)
     visualisation.setCameraSpeed(0.1)
     # do not limit speed
@@ -134,13 +140,13 @@ def main():
     vis_agent.setModel(AGENT_DEFAULT_SHAPE)
     vis_agent.setModelScale(AGENT_DEFAULT_SCALE)
     vis_agent.setColor(AGENT_COLOR_SCHEME)
-    # vis_agent.setRollVariable("roll")
     
     # Activate the visualisation.
     visualisation.activate()
 
   # set some simulation defaults
-  simulation.SimulationConfig().random_seed = RANDOM_SEED
+  if RANDOM_SEED is not None:
+    simulation.SimulationConfig().random_seed = RANDOM_SEED
   simulation.SimulationConfig().steps = STEP_COUNT
   simulation.SimulationConfig().verbose = VERBOSE_OUTPUT
 
@@ -150,14 +156,16 @@ def main():
   # Generate a population if an initial states file is not provided
   if not simulation.SimulationConfig().input_file:
     # Seed the host RNG using the cuda simulations' RNG
-    random.seed(simulation.SimulationConfig().random_seed)
+    if RANDOM_SEED is not None:
+      random.seed(simulation.SimulationConfig().random_seed)
     # Generate a vector of agents
     population = pyflamegpu.AgentVector(agent, INIT_AGENT_COUNT)
     # Iterate the population, initialising per-agent values
     instance: pyflamegpu.AgentVector_Agent
     # randomly create starting position for agents
     import numpy as np
-    np.random.RandomState(RANDOM_SEED)
+    if RANDOM_SEED is not None:
+      np.random.RandomState(RANDOM_SEED)
     # initialise grid with id for all possible agents
     grid = np.arange(MAX_AGENT_COUNT, dtype=np.uint32)
     # shuffle grid
@@ -175,6 +183,7 @@ def main():
       if USE_VISUALISATION:
         instance.setVariableFloat("x", float(x))
         instance.setVariableFloat("y", float(y))
+      instance.setVariableFloat("energy", random.uniform(1, MAX_INIT_ENERGY))
       # select agent strategy
       instance.setVariableUInt('agent_strategy', random.choices(AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS)[0])
     del x, y, grid, np
