@@ -8,39 +8,61 @@ import pyflamegpu
 # Import standard python libs that are used
 import sys, random, math
 
+
+##########################################
+# SIMULATION CONFIGURATION               #
+##########################################
+
 # Define some constants
 RANDOM_SEED: int = 69420
+
+# upper agent limit ... please make it a square number for sanity
 MAX_AGENT_COUNT: int = 16384 # if you change this please change the value in interact.cu
+# starting agent limit
 INIT_AGENT_COUNT: int = MAX_AGENT_COUNT // 4
+# how long to run the sim for
 STEP_COUNT: int = 10000
+# TODO: logging
 VERBOSE_OUTPUT: bool = False
+# grid dimensions x, y
 ENV_MAX: int = math.ceil(math.sqrt(MAX_AGENT_COUNT))
+# Show agent visualisation
 USE_VISUALISATION: bool = True
-VISUALISE_COMMUNICATION_GRID = False
 
 # Define the environment
-INIT_COOP_FREQ: float = 0.5
-COST_OF_LIVING: float = 0.5
-PAYOFF_CD: float = -1.0
+
 MAX_PLAY_DISTANCE: int = 1 # radius of message search grid
 
+# Energy cost per step
+COST_OF_LIVING: float = 0.5
+
+# Reproduce if energy is above this threshold
 REPRODUCE_MIN_ENERGY: float = 100.0
+# Cost of reproduction
 REPRODUCE_COST: float = 50.0
+
+# Payoff for both cooperating
 PAYOFF_CC: float = 3.0
+# Payoff for the defector
 PAYOFF_DC: float = 5.0
+# Payoff for cooperating against a defector
+PAYOFF_CD: float = -1.0
+# Upper energy limit (do we need this?)
 MAX_ENERGY: float = 150.0
+# How much energy an agent can start with (max)
 MAX_INIT_ENERGY: float = 50.0
+# Noise will invert the agent's decision
+ENV_NOISE: float = 0.0
 
-CUDA_SRC_PATH: str = "src/pd/cudasrc"
-CUDA_SEARCH_FUNC: str = "search"
-CUDA_INTERACT_FUNC: str = "interact"
-
-ROLL_RADS_270: float = 3 * math.pi / 2
+# How agents move
 AGENT_TRAVEL_STRATEGIES: List[str] = ["random"]
 AGENT_TRAVEL_STRATEGY: int = AGENT_TRAVEL_STRATEGIES.index("random")
+
+# Cost of movement / migration
 AGENT_TRAVEL_COST: float = 0.0
-AGENT_DEFAULT_SHAPE: str = './src/resources/models/primitive_pyramid.obj'
-AGENT_DEFAULT_SCALE: float = 1 / 2.0
+
+# Agent strategies for the PD game
+# "proportion" let's you say how likely agents spawn with a particular strategy
 AGENT_STRATEGIES: dict = {
   "always_coop": {
     "name": "always_coop",
@@ -63,17 +85,43 @@ AGENT_STRATEGIES: dict = {
     "proportion": 0.10,
   },
 }
-AGENT_WEIGHTS: List[float] = [AGENT_STRATEGIES[strategy]["proportion"] for strategy in AGENT_STRATEGIES]
-AGENT_STRATEGY_IDS: List[int] = [AGENT_STRATEGIES[strategy]["id"] for strategy in AGENT_STRATEGIES]
+
+# How many variants of agents are there?
 AGENT_TRAITS: List[int] = list(range(4))
 
+# Should an agent deal differently per variant? (max strategies = number of variants)
+# or, should they have a strategy for same vs different (max strategies = 2)
 AGENT_STRATEGY_PER_TRAIT: bool = False
 
+# Mutation frequency
 AGENT_TRAIT_MUTATION_RATE: float = 0.05
+
+
+##########################################
+# Main script                            #
+##########################################
+# You should not need to change anything #
+# below this line                        #
+##########################################
+
+# Generate weights based on strategy configuration
+AGENT_WEIGHTS: List[float] = [AGENT_STRATEGIES[strategy]["proportion"] for strategy in AGENT_STRATEGIES]
+# generate strategy IDs based on strategy configuration
+AGENT_STRATEGY_IDS: List[int] = [AGENT_STRATEGIES[strategy]["id"] for strategy in AGENT_STRATEGIES]
 
 # definie color pallete for each agent strategy, with fallback to white
 AGENT_COLOR_SCHEME: pyflamegpu.uDiscreteColor = pyflamegpu.uDiscreteColor("agent_trait", pyflamegpu.SET1, pyflamegpu.WHITE)
+AGENT_DEFAULT_SHAPE: str = './src/resources/models/primitive_pyramid.obj'
+AGENT_DEFAULT_SCALE: float = 1 / 2.0
+# Roll if we need to rotate the agents 270 degrees
+ROLL_RADS_270: float = 3 * math.pi / 2
 
+# where cuda scripts are stored
+CUDA_SRC_PATH: str = "src/pd/cudasrc"
+
+# agent functions
+CUDA_SEARCH_FUNC: str = "search"
+CUDA_INTERACT_FUNC: str = "interact"
 
 
 # Define a method which when called will define the model, Create the simulation object and execute it.
@@ -112,7 +160,6 @@ def main():
   env.newPropertyUInt("max_agents", MAX_AGENT_COUNT)
   env.newPropertyFloat("max_energy", MAX_ENERGY)
   env.newPropertyUInt("max_play_distance", MAX_PLAY_DISTANCE)
-  env.newPropertyFloat("init_coop_freq", INIT_COOP_FREQ)
   env.newPropertyFloat("cost_of_living", COST_OF_LIVING)
   env.newPropertyFloat("payoff_cd", PAYOFF_CD)
   env.newPropertyFloat("payoff_cc", PAYOFF_CC)
