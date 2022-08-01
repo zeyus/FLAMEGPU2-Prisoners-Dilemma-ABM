@@ -24,9 +24,9 @@ FLAMEGPU_AGENT_FUNCTION(interact, flamegpu::MessageArray2D, flamegpu::MessageNon
             // we have played before, and this is the second of two possible interactions
             // do nothing except reset grid
             // playspace[opponent_grid_index][my_grid_index]--;
-            
+            playspace[opponent_grid_index][my_grid_index] -= 2;
         } else {
-            playspace[my_grid_index][opponent_grid_index] -= 2;
+            ++playspace[my_grid_index][opponent_grid_index];
         }
 
     }
