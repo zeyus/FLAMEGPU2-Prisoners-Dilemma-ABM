@@ -44,7 +44,7 @@ AGENT_STRATEGIES: list = {
   "always_coop": {
     "name": "always_coop",
     "id": 0,
-    "proportion": 0.25,
+    "proportion": 0.50,
   },
   "always_cheat": {
     "name": "always_cheat",
@@ -52,21 +52,31 @@ AGENT_STRATEGIES: list = {
     "proportion": 0.25,
   },
   "tit_for_tat": {
-    "name": "always_cheat",
+    "name": "tit_for_tat",
     "id": 2,
-    "proportion": 0.25,
+    "proportion": 0.15,
   },
   "random": {
-    "name": "always_cheat",
+    "name": "random",
     "id": 3,
-    "proportion": 0.25,
+    "proportion": 0.10,
   },
 }
 AGENT_WEIGHTS = [AGENT_STRATEGIES[strategy]["proportion"] for strategy in AGENT_STRATEGIES]
 AGENT_STRATEGY_IDS = [AGENT_STRATEGIES[strategy]["id"] for strategy in AGENT_STRATEGIES]
+AGENT_TRAITS = [
+  0,
+  1,
+  2,
+  3
+]
+
+AGENT_STRATEGY_PER_TRAIT = False
+
+AGENT_TRAIT_MUTATION_RATE = 0.05
 
 # definie color pallete for each agent strategy, with fallback to white
-AGENT_COLOR_SCHEME: pyflamegpu.uDiscreteColor = pyflamegpu.uDiscreteColor("agent_strategy", pyflamegpu.SET1, pyflamegpu.WHITE)
+AGENT_COLOR_SCHEME: pyflamegpu.uDiscreteColor = pyflamegpu.uDiscreteColor("agent_trait", pyflamegpu.SET1, pyflamegpu.WHITE)
 
 
 
@@ -84,7 +94,8 @@ def main():
 
   agent: pyflamegpu.AgentDescription = model.newAgent("prisoner")
   agent.newVariableID("id")
-  agent.newVariableUInt("agent_strategy")
+  agent.newVariableArrayUInt("agent_strategies")
+  agent.newVariableUInt("agent_trait")
   agent.newVariableUInt("x_a")
   agent.newVariableUInt("y_a")
   agent.newVariableUInt("grid_index")
@@ -98,13 +109,6 @@ def main():
   agent_move_fn: pyflamegpu.AgentFunctionDescription = agent.newRTCFunctionFile(CUDA_INTERACT_FUNC, '.'.join(['/'.join([CUDA_SRC_PATH, CUDA_INTERACT_FUNC]), 'cu']))
   agent_move_fn.setMessageInput("player_search_msg")
   agent_move_fn.setAllowAgentDeath(True)
-
-  # layer spec
-  # 1. Send out search messages
-  # 2. Play with nearby players
-  # 3. Die if energy is too low
-  # 4. conditionally move if haven't played
-  # 5. reproduce if energy is high enough
   
   # Environment properties
   env: pyflamegpu.EnvironmentDescription = model.Environment()
@@ -126,10 +130,10 @@ def main():
   env.newMacroPropertyUInt("playspace", MAX_AGENT_COUNT, MAX_AGENT_COUNT)
 
   # Layer #1
-  layer1 = model.newLayer()
+  layer1: pyflamegpu.LayerDescription = model.newLayer()
   layer1.addAgentFunction("prisoner", CUDA_SEARCH_FUNC)
   # Layer #2
-  layer2 = model.newLayer()
+  layer2: pyflamegpu.LayerDescription = model.newLayer()
   layer2.addAgentFunction("prisoner", CUDA_INTERACT_FUNC)
 
 
@@ -197,7 +201,26 @@ def main():
         instance.setVariableFloat("y", float(y))
       instance.setVariableFloat("energy", random.uniform(1, MAX_INIT_ENERGY))
       # select agent strategy
-      instance.setVariableUInt('agent_strategy', random.choices(AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS)[0])
+      agent_trait: int = random.choice(AGENT_TRAITS)
+      instance.setVariableUInt("agent_trait", agent_trait)
+      # select agent strategy
+      if AGENT_STRATEGY_PER_TRAIT:
+        # if we are using a per-trait strategy, then pick random weighted strategies
+        instance.setVariableArrayUInt('agent_strategies', random.choices(AGENT_STRATEGIES, weights=AGENT_WEIGHTS, k=len(AGENT_TRAITS)))
+      else:
+        # otherwise, we need a strategy for agents with matching traits
+        # and a second for agents with different traits
+        strategy_my: int
+        strategy_other: int
+        strategy_my, strategy_other = random.choices(AGENT_STRATEGIES, weights=AGENT_WEIGHTS, k=2)
+        agent_strategies: list = []
+        trait: int
+        for i, trait in enumerate(agent_trait):
+          if trait == agent_trait:
+            agent_strategies.append(strategy_my)
+          else:
+            agent_strategies.append(strategy_other)
+        instance.setVariableArrayUInt('agent_strategies', agent_strategies)
     del x, y, grid, np
     # Set the population for the simulation object
     simulation.setPopulationData(population)
