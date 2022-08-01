@@ -3,6 +3,7 @@
 ###
 
 # Import pyflamegpu
+from typing import List
 import pyflamegpu
 # Import standard python libs that are used
 import sys, random, math
@@ -35,12 +36,12 @@ CUDA_SEARCH_FUNC: str = "search"
 CUDA_INTERACT_FUNC: str = "interact"
 
 ROLL_RADS_270: float = 3 * math.pi / 2
-AGENT_TRAVEL_STRATEGIES: list = ["random"]
+AGENT_TRAVEL_STRATEGIES: List[str] = ["random"]
 AGENT_TRAVEL_STRATEGY: int = AGENT_TRAVEL_STRATEGIES.index("random")
-AGENT_TRAVEL_COST = 0.0
+AGENT_TRAVEL_COST: float = 0.0
 AGENT_DEFAULT_SHAPE: str = './src/resources/models/primitive_pyramid.obj'
 AGENT_DEFAULT_SCALE: float = 1 / 2.0
-AGENT_STRATEGIES: list = {
+AGENT_STRATEGIES: dict = {
   "always_coop": {
     "name": "always_coop",
     "id": 0,
@@ -62,18 +63,13 @@ AGENT_STRATEGIES: list = {
     "proportion": 0.10,
   },
 }
-AGENT_WEIGHTS = [AGENT_STRATEGIES[strategy]["proportion"] for strategy in AGENT_STRATEGIES]
-AGENT_STRATEGY_IDS = [AGENT_STRATEGIES[strategy]["id"] for strategy in AGENT_STRATEGIES]
-AGENT_TRAITS = [
-  0,
-  1,
-  2,
-  3
-]
+AGENT_WEIGHTS: List[float] = [AGENT_STRATEGIES[strategy]["proportion"] for strategy in AGENT_STRATEGIES]
+AGENT_STRATEGY_IDS: List[int] = [AGENT_STRATEGIES[strategy]["id"] for strategy in AGENT_STRATEGIES]
+AGENT_TRAITS: List[int] = list(range(4))
 
-AGENT_STRATEGY_PER_TRAIT = False
+AGENT_STRATEGY_PER_TRAIT: bool = False
 
-AGENT_TRAIT_MUTATION_RATE = 0.05
+AGENT_TRAIT_MUTATION_RATE: float = 0.05
 
 # definie color pallete for each agent strategy, with fallback to white
 AGENT_COLOR_SCHEME: pyflamegpu.uDiscreteColor = pyflamegpu.uDiscreteColor("agent_trait", pyflamegpu.SET1, pyflamegpu.WHITE)
@@ -94,7 +90,7 @@ def main():
 
   agent: pyflamegpu.AgentDescription = model.newAgent("prisoner")
   agent.newVariableID("id")
-  agent.newVariableArrayUInt("agent_strategies")
+  agent.newVariableArrayUInt("agent_strategies", len(AGENT_TRAITS))
   agent.newVariableUInt("agent_trait")
   agent.newVariableUInt("x_a")
   agent.newVariableUInt("y_a")
@@ -125,6 +121,7 @@ def main():
   env.newPropertyFloat("reproduce_cost", REPRODUCE_COST)
   env.newPropertyFloat("travel_strategy", AGENT_TRAVEL_STRATEGY)
   env.newPropertyFloat("travel_cost", AGENT_TRAVEL_COST)
+  env.newPropertyFloat("trait_mutation_rate", AGENT_TRAIT_MUTATION_RATE)
 
   # define playspace
   env.newMacroPropertyUInt("playspace", MAX_AGENT_COUNT, MAX_AGENT_COUNT)
@@ -206,16 +203,16 @@ def main():
       # select agent strategy
       if AGENT_STRATEGY_PER_TRAIT:
         # if we are using a per-trait strategy, then pick random weighted strategies
-        instance.setVariableArrayUInt('agent_strategies', random.choices(AGENT_STRATEGIES, weights=AGENT_WEIGHTS, k=len(AGENT_TRAITS)))
+        instance.setVariableArrayUInt('agent_strategies', random.choices(AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=len(AGENT_TRAITS)))
       else:
         # otherwise, we need a strategy for agents with matching traits
         # and a second for agents with different traits
         strategy_my: int
         strategy_other: int
-        strategy_my, strategy_other = random.choices(AGENT_STRATEGIES, weights=AGENT_WEIGHTS, k=2)
-        agent_strategies: list = []
+        strategy_my, strategy_other = random.choices(AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=2)
+        agent_strategies: List[int] = []
         trait: int
-        for i, trait in enumerate(agent_trait):
+        for i, trait in enumerate(AGENT_TRAITS):
           if trait == agent_trait:
             agent_strategies.append(strategy_my)
           else:

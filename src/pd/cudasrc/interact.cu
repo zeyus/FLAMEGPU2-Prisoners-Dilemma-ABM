@@ -20,13 +20,13 @@ FLAMEGPU_AGENT_FUNCTION(interact, flamegpu::MessageArray2D, flamegpu::MessageNon
         flamegpu::id_t local_competitor = message.getVariable<flamegpu::id_t>("id");
         unsigned int opponent_grid_index = message.getVariable<unsigned int>("grid_index");
         // play with the competitor
-        if (playspace[opponent_grid_index][my_grid_index] == 0) {
-            // we haven't played before
-            // playspace[my_grid_index][opponent_grid_index]++;
-        } else {
+        if (++playspace[opponent_grid_index][my_grid_index] != 1) {
             // we have played before, and this is the second of two possible interactions
             // do nothing except reset grid
             // playspace[opponent_grid_index][my_grid_index]--;
+            
+        } else {
+            playspace[my_grid_index][opponent_grid_index] -= 2;
         }
 
     }
