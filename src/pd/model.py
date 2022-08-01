@@ -24,12 +24,9 @@ INIT_AGENT_COUNT: int = MAX_AGENT_COUNT // 4
 STEP_COUNT: int = 10000
 # TODO: logging
 VERBOSE_OUTPUT: bool = False
-# grid dimensions x, y
-ENV_MAX: int = math.ceil(math.sqrt(MAX_AGENT_COUNT))
+
 # Show agent visualisation
 USE_VISUALISATION: bool = True
-
-# Define the environment
 
 MAX_PLAY_DISTANCE: int = 1 # radius of message search grid
 
@@ -104,6 +101,9 @@ AGENT_TRAIT_MUTATION_RATE: float = 0.05
 # below this line                        #
 ##########################################
 
+# grid dimensions x = y
+ENV_MAX: int = math.ceil(math.sqrt(MAX_AGENT_COUNT))
+
 # Generate weights based on strategy configuration
 AGENT_WEIGHTS: List[float] = [AGENT_STRATEGIES[strategy]["proportion"] for strategy in AGENT_STRATEGIES]
 # generate strategy IDs based on strategy configuration
@@ -120,8 +120,60 @@ ROLL_RADS_270: float = 3 * math.pi / 2
 CUDA_SRC_PATH: str = "src/pd/cudasrc"
 
 # agent functions
-CUDA_SEARCH_FUNC: str = "search"
-CUDA_INTERACT_FUNC: str = "interact"
+CUDA_SEARCH_FUNC_NAME: str = "search"
+CUDA_SEARCH_FUNC: str = rf"""
+FLAMEGPU_AGENT_FUNCTION({CUDA_SEARCH_FUNC_NAME}, flamegpu::MessageNone, flamegpu::MessageArray2D) {{
+    FLAMEGPU->message_out.setVariable<flamegpu::id_t>("id", FLAMEGPU->getID());
+    const unsigned int my_grid_index = FLAMEGPU->getVariable<unsigned int>("grid_index");
+    FLAMEGPU->message_out.setVariable<unsigned int>("grid_index", my_grid_index);
+    FLAMEGPU->message_out.setVariable<float>("energy", FLAMEGPU->getVariable<float>("energy"));
+    FLAMEGPU->message_out.setIndex(FLAMEGPU->getVariable<unsigned int>("x"), FLAMEGPU->getVariable<unsigned int>("y"));
+    auto playspace = FLAMEGPU->environment.getProperty<unsigned int, {MAX_AGENT_COUNT}, 16384>("playspace");
+    // set playspace at my position to my current energy
+    playspace[my_grid_index][my_grid_index] = FLAMEGPU->getVariable<float>("energy");
+    return flamegpu::ALIVE;
+}}
+"""
+CUDA_INTERACT_FUNC_NAME: str = "interact"
+CUDA_INTERACT_FUNC: str = rf"""
+FLAMEGPU_AGENT_FUNCTION({CUDA_INTERACT_FUNC_NAME}, flamegpu::MessageArray2D, flamegpu::MessageNone) {{
+    const unsigned int my_x = FLAMEGPU->getVariable<unsigned int>("x_a");
+    const unsigned int my_y = FLAMEGPU->getVariable<unsigned int>("y_a");
+    const unsigned int my_grid_index = FLAMEGPU->getVariable<unsigned int>("grid_index");
+
+    // const unsigned int max_agents = FLAMEGPU->environment.getProperty<unsigned int>("max_agents");
+    // const unsigned int env_max = FLAMEGPU->environment.getProperty<unsigned int>("env_max");
+    
+    const unsigned int interaction_radius = FLAMEGPU->environment.getProperty<unsigned int>("max_play_distance");
+    
+    const float reproduction_threshold = FLAMEGPU->environment.getProperty<float>("reproduce_min_energy");
+    const float reproduction_cost = FLAMEGPU->environment.getProperty<float>("reproduce_cost");
+
+    float my_energy = FLAMEGPU->getVariable<float>("energy");
+    // replace dimensions with python string formatting so agent count can vary
+    auto playspace = FLAMEGPU->environment.getProperty<unsigned int, {MAX_AGENT_COUNT}>("playspace");
+    // iterate over all cells in the neighbourhood
+    // this also wraps across env boundaries.
+    for (auto &message : FLAMEGPU->message_in.wrap(my_x, my_y, interaction_radius)) {{
+        flamegpu::id_t local_competitor = message.getVariable<flamegpu::id_t>("id");
+        unsigned int opponent_grid_index = message.getVariable<unsigned int>("grid_index");
+        // play with the competitor if competitor grid index is lower
+        if (opponent_grid_index < my_grid_index) {{
+            float opponent_energy = message.getVariable<float>("energy");
+            if (my_energy <= 0.0) {{
+                return flamegpu::DEAD;
+            }}
+        }}
+    }}
+    
+    if (my_energy > reproduction_threshold) {{
+        // spawn child in a free adjacent cell
+        FLAMEGPU->setVariable<float>("energy", my_energy - reproduction_cost);
+        return flamegpu::ALIVE;
+    }}
+    return flamegpu::ALIVE;
+}}
+"""
 
 
 # Define a method which when called will define the model, Create the simulation object and execute it.
@@ -133,11 +185,13 @@ def main():
   message: pyflamegpu.MessageArray2D_Description = model.newMessageArray2D("player_search_msg")
   message.newVariableID("id")
   message.newVariableUInt("grid_index")
+  message.newVariableFloat("energy")
   # create array to fit all agents
   message.setDimensions(ENV_MAX, ENV_MAX)
 
   agent: pyflamegpu.AgentDescription = model.newAgent("prisoner")
   agent.newVariableID("id")
+  # this is to hold a strategy per opponent trait
   agent.newVariableArrayUInt("agent_strategies", len(AGENT_TRAITS))
   agent.newVariableUInt("agent_trait")
   agent.newVariableUInt("x_a")
@@ -148,37 +202,39 @@ def main():
     agent.newVariableFloat("x")
     agent.newVariableFloat("y")
   # load agent-specific interactions
-  agent_search_fn: pyflamegpu.AgentFunctionDescription = agent.newRTCFunctionFile(CUDA_SEARCH_FUNC, '.'.join(['/'.join([CUDA_SRC_PATH, CUDA_SEARCH_FUNC]), 'cu']))
+  agent_search_fn: pyflamegpu.AgentFunctionDescription = agent.newRTCFunction(CUDA_SEARCH_FUNC_NAME, CUDA_SEARCH_FUNC)
   agent_search_fn.setMessageOutput("player_search_msg")
-  agent_move_fn: pyflamegpu.AgentFunctionDescription = agent.newRTCFunctionFile(CUDA_INTERACT_FUNC, '.'.join(['/'.join([CUDA_SRC_PATH, CUDA_INTERACT_FUNC]), 'cu']))
+  agent_move_fn: pyflamegpu.AgentFunctionDescription = agent.newRTCFunction(CUDA_INTERACT_FUNC_NAME, CUDA_INTERACT_FUNC)
   agent_move_fn.setMessageInput("player_search_msg")
   agent_move_fn.setAllowAgentDeath(True)
   
   # Environment properties
   env: pyflamegpu.EnvironmentDescription = model.Environment()
-  env.newPropertyUInt("env_max", ENV_MAX)
-  env.newPropertyUInt("max_agents", MAX_AGENT_COUNT)
-  env.newPropertyFloat("max_energy", MAX_ENERGY)
-  env.newPropertyUInt("max_play_distance", MAX_PLAY_DISTANCE)
-  env.newPropertyFloat("cost_of_living", COST_OF_LIVING)
-  env.newPropertyFloat("payoff_cd", PAYOFF_CD)
-  env.newPropertyFloat("payoff_cc", PAYOFF_CC)
-  env.newPropertyFloat("payoff_dc", PAYOFF_DC)
-  env.newPropertyFloat("reproduce_min_energy", REPRODUCE_MIN_ENERGY)
-  env.newPropertyFloat("reproduce_cost", REPRODUCE_COST)
-  env.newPropertyFloat("travel_strategy", AGENT_TRAVEL_STRATEGY)
-  env.newPropertyFloat("travel_cost", AGENT_TRAVEL_COST)
-  env.newPropertyFloat("trait_mutation_rate", AGENT_TRAIT_MUTATION_RATE)
+  env.newPropertyUInt("env_max", ENV_MAX, isConst=True)
+  env.newPropertyUInt("max_agents", MAX_AGENT_COUNT, isConst=True)
+  env.newPropertyFloat("max_energy", MAX_ENERGY, isConst=True)
+  env.newPropertyUInt("max_play_distance", MAX_PLAY_DISTANCE, isConst=True)
+  env.newPropertyFloat("cost_of_living", COST_OF_LIVING, isConst=True)
+  env.newPropertyFloat("payoff_cd", PAYOFF_CD, isConst=True)
+  env.newPropertyFloat("payoff_cc", PAYOFF_CC, isConst=True)
+  env.newPropertyFloat("payoff_dc", PAYOFF_DC, isConst=True)
+  env.newPropertyFloat("reproduce_min_energy", REPRODUCE_MIN_ENERGY, isConst=True)
+  env.newPropertyFloat("reproduce_cost", REPRODUCE_COST, isConst=True)
+  env.newPropertyFloat("travel_strategy", AGENT_TRAVEL_STRATEGY, isConst=True)
+  env.newPropertyFloat("travel_cost", AGENT_TRAVEL_COST, isConst=True)
+  env.newPropertyFloat("trait_mutation_rate", AGENT_TRAIT_MUTATION_RATE, isConst=True)
+  # An array to hold the energy of each agent
+  env.newPropertyArrayFloat("playspace", [0] * MAX_AGENT_COUNT)
 
   # define playspace
-  env.newMacroPropertyUInt("playspace", MAX_AGENT_COUNT, MAX_AGENT_COUNT)
+  # env.newMacroPropertyUInt("playspace", MAX_AGENT_COUNT, MAX_AGENT_COUNT)
 
   # Layer #1
   layer1: pyflamegpu.LayerDescription = model.newLayer()
-  layer1.addAgentFunction("prisoner", CUDA_SEARCH_FUNC)
+  layer1.addAgentFunction("prisoner", CUDA_SEARCH_FUNC_NAME)
   # Layer #2
   layer2: pyflamegpu.LayerDescription = model.newLayer()
-  layer2.addAgentFunction("prisoner", CUDA_INTERACT_FUNC)
+  layer2.addAgentFunction("prisoner", CUDA_INTERACT_FUNC_NAME)
 
 
   simulation: pyflamegpu.CUDASimulation = pyflamegpu.CUDASimulation(model)

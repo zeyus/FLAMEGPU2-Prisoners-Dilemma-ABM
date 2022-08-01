@@ -19,21 +19,21 @@ FLAMEGPU_AGENT_FUNCTION(interact, flamegpu::MessageArray2D, flamegpu::MessageNon
     for (auto &message : FLAMEGPU->message_in.wrap(my_x, my_y, interaction_radius)) {
         flamegpu::id_t local_competitor = message.getVariable<flamegpu::id_t>("id");
         unsigned int opponent_grid_index = message.getVariable<unsigned int>("grid_index");
-        // play with the competitor
-        if (++playspace[opponent_grid_index][my_grid_index] != 1) {
-            // we have played before, and this is the second of two possible interactions
-            // do nothing except reset grid
-            // playspace[opponent_grid_index][my_grid_index]--;
-            playspace[opponent_grid_index][my_grid_index] -= 2;
-        } else {
-            ++playspace[my_grid_index][opponent_grid_index];
-            
+        // play with the competitor if competitor grid index is lower
+        if (opponent_grid_index < my_grid_index) {
+            // if (++playspace[opponent_grid_index][my_grid_index] != 1) {
+            //     // we have played before, and this is the second of two possible interactions
+            //     // do nothing except reset grid
+            //     playspace[opponent_grid_index][my_grid_index] -= 2;
+            // } else {
+            //     ++playspace[my_grid_index][opponent_grid_index];
+            // }
+            if (my_energy <= 0.0) {
+                return flamegpu::DEAD;
+            }
         }
-
     }
-    if (my_energy <= 0.0) {
-        return flamegpu::DEAD;
-    }
+    
     if (my_energy > reproduction_threshold) {
         // spawn child in a free adjacent cell
         FLAMEGPU->setVariable<float>("energy", my_energy - reproduction_cost);
