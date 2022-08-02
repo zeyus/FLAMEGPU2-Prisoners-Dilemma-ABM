@@ -119,12 +119,10 @@ AGENT_STRATEGY_IDS: List[int] = [AGENT_STRATEGIES[strategy]["id"] for strategy i
 # definie color pallete for each agent strategy, with fallback to white
 AGENT_COLOR_SCHEME: pyflamegpu.uDiscreteColor = pyflamegpu.uDiscreteColor("agent_trait", pyflamegpu.SET1, pyflamegpu.WHITE)
 AGENT_DEFAULT_SHAPE: str = './src/resources/models/primitive_pyramid.obj'
-AGENT_DEFAULT_SCALE: float = 1 / 2.0
+AGENT_DEFAULT_SCALE: float = 0.9
 # Roll if we need to rotate the agents 270 degrees
 ROLL_RADS_270: float = 3 * math.pi / 2
 
-# where cuda scripts are stored
-CUDA_SRC_PATH: str = "src/pd/cudasrc"
 
 # agent functions
 CUDA_SEARCH_FUNC_NAME: str = "search"
@@ -155,7 +153,6 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_INTERACT_FUNC_NAME}, flamegpu::MessageArray2D, fla
     const float reproduction_cost = FLAMEGPU->environment.getProperty<float>("reproduce_cost");
 
     float my_energy = FLAMEGPU->getVariable<float>("energy");
-    // replace dimensions with python string formatting so agent count can vary
     // auto playspace = FLAMEGPU->environment.getProperty<float, {MAX_AGENT_COUNT}>("playspace");
     // iterate over all cells in the neighbourhood
     // this also wraps across env boundaries.
@@ -247,8 +244,8 @@ if VERBOSE_OUTPUT:
 
     def run(self, FLAMEGPU: pyflamegpu.HostAPI):
       prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
-      n_ready = prisoner.countUInt("agent_status", AGENT_STATUS_READY)
-      n_playing = prisoner.countUInt("agent_status", AGENT_STATUS_PLAYING)
+      n_ready: int = prisoner.countUInt("agent_status", AGENT_STATUS_READY)
+      n_playing: int = prisoner.countUInt("agent_status", AGENT_STATUS_PLAYING)
       print(f"step: {FLAMEGPU.getStepCounter()}, n_ready: {n_ready}, n_playing: {n_playing}")
 
 # Define a method which when called will define the model, Create the simulation object and execute it.
@@ -363,8 +360,7 @@ def main():
       random.seed(simulation.SimulationConfig().random_seed)
     # Generate a vector of agents
     population = pyflamegpu.AgentVector(agent, INIT_AGENT_COUNT)
-    # Iterate the population, initialising per-agent values
-    instance: pyflamegpu.AgentVector_Agent
+    
     # randomly create starting position for agents
     import numpy as np
     if RANDOM_SEED is not None:
@@ -375,7 +371,8 @@ def main():
     np.random.shuffle(grid)
     # reshape it to match the environment size
     grid = np.reshape(grid, (ENV_MAX, ENV_MAX))
-    # initialise agents
+    # Iterate the population, initialising per-agent values
+    instance: pyflamegpu.AgentVector_Agent
     for i, instance in enumerate(population):
       # find agent position in grid
       pos = np.where(grid == i)
