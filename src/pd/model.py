@@ -293,7 +293,13 @@ if VERBOSE_OUTPUT:
     def run(self, FLAMEGPU: pyflamegpu.HostAPI):
       prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
       _print_prisoner_states(prisoner)
-# Define a host function called init_fn
+
+class exit_always_fn(pyflamegpu.HostFunctionConditionCallback):
+  def __init__(self):
+    super().__init__()
+
+  def run(self, FLAMEGPU: pyflamegpu.HostAPI):
+    return pyflamegpu.EXIT
 class exit_search_fn(pyflamegpu.HostFunctionConditionCallback):
   iterations: int = 0
   def __init__(self):
@@ -301,7 +307,6 @@ class exit_search_fn(pyflamegpu.HostFunctionConditionCallback):
 
   def run(self, FLAMEGPU: pyflamegpu.HostAPI):
     self.iterations += 1
-    print(self.iterations)
     if self.iterations < 9:
       # Agent movements still unresolved
       prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
@@ -319,7 +324,6 @@ class exit_move_fn(pyflamegpu.HostFunctionConditionCallback):
 
   def run(self, FLAMEGPU: pyflamegpu.HostAPI):
     self.iterations += 1
-    print(self.iterations)
     if self.iterations < 9:
       # Agent movements still unresolved
       prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
@@ -346,10 +350,17 @@ def make_core_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescr
   
   return agent
 
+def _print_environment_properties() -> None:
+  print(f"env_max (grid width): {ENV_MAX}")
+  print(f"max agent count: {MAX_AGENT_COUNT}")
 
 # Define a method which when called will define the model, Create the simulation object and execute it.
 def main():
-  print(ENV_MAX)
+  if VERBOSE_OUTPUT:
+    _print_environment_properties()
+  if pyflamegpu.SEATBELTS:
+    print("Seatbelts are enabled, this will significantly impact performance.")
+    print("Ignore this if you are developing the model. Otherwise consider using a build without seatbelts.")
   # Define the FLAME GPU model
   model: pyflamegpu.ModelDescription = pyflamegpu.ModelDescription("prisoners_dilemma")
   # Environment properties
@@ -386,7 +397,7 @@ def main():
   
   # play resolution submodel
   pdgame_model: pyflamegpu.ModelDescription = pyflamegpu.ModelDescription("pdgame_model")
-  pdgame_model.addExitConditionCallback(exit_search_fn().__disown__())
+  pdgame_model.addExitConditionCallback(exit_always_fn().__disown__())
   # Define the location message list
   message: pyflamegpu.MessageArray2D_Description = pdgame_model.newMessageArray2D("player_search_msg")
   message.newVariableID("id")
