@@ -308,6 +308,8 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
       if (num_challengers > 0) {{
         // we have to accept responses
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_RESPOND});
+      }} else {{
+        FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_PLAYING});
       }}
       ++game_sequence;
       FLAMEGPU->setVariable<unsigned int>("game_sequence", game_sequence);
@@ -323,12 +325,19 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
 CUDA_AGENT_PLAY_RESPONSE_CONDITION_NAME: str = "response_condition"
 CUDA_AGENT_PLAY_RESPONSE_CONDITION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_AGENT_PLAY_RESPONSE_CONDITION_NAME}) {{
-    return FLAMEGPU->getVariable<unsigned int>("agent_status") == {AGENT_STATUS_READY_TO_RESPOND};
+    const unsigned int agent_status = FLAMEGPU->getVariable<unsigned int>("agent_status");
+    return agent_status == {AGENT_STATUS_READY_TO_RESPOND} || agent_status == {AGENT_STATUS_PLAYING};
 }}
 """
 CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME: str = "play_response"
 CUDA_AGENT_PLAY_RESPONSE_FUNC: str = rf"""
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageArray2D, flamegpu::MessageNone) {{
+    // if I don't have any challengers, I don't need to continue
+    if (FLAMEGPU->getVariable<unsigned int>("agent_status") == {AGENT_STATUS_PLAYING}) {{
+        // if we get here, it's because a sent one challenge, but has no challengers themselves
+        FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_CHALLENGE});
+        return flamegpu::ALIVE;
+    }}
     const unsigned int my_x = FLAMEGPU->getVariable<unsigned int>("x_a");
     const unsigned int my_y = FLAMEGPU->getVariable<unsigned int>("y_a");
     const flamegpu::id_t my_id = FLAMEGPU->getID();
