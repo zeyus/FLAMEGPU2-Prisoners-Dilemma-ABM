@@ -84,12 +84,13 @@ AGENT_TRAVEL_COST: float = 1.0
 # Agent status
 AGENT_STATUS_READY: int = 1
 AGENT_STATUS_READY_TO_CHALLENGE: int = 2
-AGENT_STATUS_READY_TO_RESPOND: int = 4
-AGENT_STATUS_PLAYING: int = 8
-AGENT_STATUS_PLAY_COMPLETED: int = 16
-AGENT_STATUS_MOVEMENT_UNRESOLVED: int = 32
-AGENT_STATUS_MOVING: int = 64
-AGENT_STATUS_MOVEMENT_COMPLETED: int = 128
+AGENT_STATUS_SKIP_CHALLENGE: int = 4
+AGENT_STATUS_READY_TO_RESPOND: int = 8
+AGENT_STATUS_SKIP_RESPONSE: int = 16
+AGENT_STATUS_PLAY_COMPLETED: int = 32
+AGENT_STATUS_MOVEMENT_UNRESOLVED: int = 64
+AGENT_STATUS_MOVING: int = 128
+AGENT_STATUS_MOVEMENT_COMPLETED: int = 256
 
 # Agent strategies for the PD game
 # "proportion" let's you say how likely agents spawn with a particular strategy
@@ -258,16 +259,17 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_GAME_LIST_FUNC_NAME}, flamegpu::MessageArray2D, fl
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_CHALLENGE});
     }} else {{
         // we only have to respond to challenges
-        FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_RESPOND});
+        FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_SKIP_CHALLENGE});
     }}
     return flamegpu::ALIVE;
 }}
 """
 
-CUDA_AGENT_PLAY_CHALLENGE_CONDITION_NAME: str = "challenge_condition"
+CUDA_AGENT_PLAY_CHALLENGE_CONDITION_NAME: str = "play_challenge_condition"
 CUDA_AGENT_PLAY_CHALLENGE_CONDITION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_AGENT_PLAY_CHALLENGE_CONDITION_NAME}) {{
-    return FLAMEGPU->getVariable<unsigned int>("agent_status") == {AGENT_STATUS_READY_TO_CHALLENGE};
+    const unsigned int agent_status = FLAMEGPU->getVariable<unsigned int>("agent_status");
+    return agent_status == {AGENT_STATUS_READY_TO_CHALLENGE} || agent_status == {AGENT_STATUS_SKIP_CHALLENGE};
 }}
 """
 
@@ -275,6 +277,12 @@ CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME: str = "play_challenge"
 CUDA_AGENT_PLAY_CHALLENGE_FUNC: str = rf"""
 
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::MessageNone, flamegpu::MessageArray2D) {{
+    // if I don't have any responders, I don't need to continue
+    if (FLAMEGPU->getVariable<unsigned int>("agent_status") == {AGENT_STATUS_SKIP_CHALLENGE}) {{
+        // if we get here, it's because we don't have to challenge anyone else
+        FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_RESPOND});
+        return flamegpu::ALIVE;
+    }}
     unsigned int game_sequence = FLAMEGPU->getVariable<unsigned int>("game_sequence");
     flamegpu::id_t opponent = FLAMEGPU->getVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("game_list", game_sequence);
     ++game_sequence;
@@ -308,9 +316,8 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
       FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_RESPOND});
     }} else {{
       // otherwise we indicate that we are still playing (but we can skip challenge responses)
-      FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_PLAYING});
+      FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_SKIP_RESPONSE});
     }}
-    
     
     FLAMEGPU->setVariable<int8_t>("responders", num_responders);
     
@@ -319,18 +326,18 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
 """
 
 
-CUDA_AGENT_PLAY_RESPONSE_CONDITION_NAME: str = "response_condition"
+CUDA_AGENT_PLAY_RESPONSE_CONDITION_NAME: str = "play_response_condition"
 CUDA_AGENT_PLAY_RESPONSE_CONDITION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_AGENT_PLAY_RESPONSE_CONDITION_NAME}) {{
     const unsigned int agent_status = FLAMEGPU->getVariable<unsigned int>("agent_status");
-    return agent_status == {AGENT_STATUS_READY_TO_RESPOND} || agent_status == {AGENT_STATUS_PLAYING};
+    return agent_status == {AGENT_STATUS_READY_TO_RESPOND} || agent_status == {AGENT_STATUS_SKIP_RESPONSE};
 }}
 """
 CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME: str = "play_response"
 CUDA_AGENT_PLAY_RESPONSE_FUNC: str = rf"""
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageArray2D, flamegpu::MessageNone) {{
     // if I don't have any challengers, I don't need to continue
-    if (FLAMEGPU->getVariable<unsigned int>("agent_status") == {AGENT_STATUS_PLAYING}) {{
+    if (FLAMEGPU->getVariable<unsigned int>("agent_status") == {AGENT_STATUS_SKIP_RESPONSE}) {{
         // if we get here, it's because a sent one challenge, but has no challengers themselves
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_CHALLENGE});
         return flamegpu::ALIVE;
@@ -359,6 +366,8 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageA
             FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY});
         }} else if (num_responders > 0) {{
             FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_CHALLENGE});
+        }} else {{
+            FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_SKIP_CHALLENGE});
         }}
 
         // there should only be one per round so
@@ -474,14 +483,13 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_RESPONSE_FUNCTION_NAME}, flamegpu::Mess
 
 def _print_prisoner_states(prisoner: pyflamegpu.HostAgentAPI) -> None:
   n_ready: int = prisoner.countUInt("agent_status", AGENT_STATUS_READY)
-  n_playing: int = prisoner.countUInt("agent_status", AGENT_STATUS_PLAYING)
   n_ready_to_challenge: int = prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_CHALLENGE)
   n_ready_to_respond: int = prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_RESPOND)
   n_play_completed: int = prisoner.countUInt("agent_status", AGENT_STATUS_PLAY_COMPLETED)
   n_moving: int = prisoner.countUInt("agent_status", AGENT_STATUS_MOVING)
   n_move_unresolved: int = prisoner.countUInt("agent_status", AGENT_STATUS_MOVEMENT_UNRESOLVED)
   n_move_completed: int = prisoner.countUInt("agent_status", AGENT_STATUS_MOVEMENT_COMPLETED)
-  print(f"n_ready: {n_ready}, n_playing: {n_playing}, n_ready_to_challenge: {n_ready_to_challenge}, n_ready_to_respond: {n_ready_to_respond} n_play_completed: {n_play_completed}, n_moving: {n_moving}, n_move_unresolved: {n_move_unresolved}, n_move_completed: {n_move_completed}")
+  print(f"n_ready: {n_ready}, n_ready_to_challenge: {n_ready_to_challenge}, n_ready_to_respond: {n_ready_to_respond} n_play_completed: {n_play_completed}, n_moving: {n_moving}, n_move_unresolved: {n_move_unresolved}, n_move_completed: {n_move_completed}")
   n_challengers: int = prisoner.sumInt8("challengers")
   n_responders: int = prisoner.sumInt8("responders")
   print(f"total challenges: {n_challengers}, total responses: {n_responders}")
@@ -505,7 +513,7 @@ class exit_play_fn(pyflamegpu.HostFunctionConditionCallback):
 
   def run(self, FLAMEGPU: pyflamegpu.HostAPI):
     prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
-    if prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_CHALLENGE) + prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_RESPOND) > 0:
+    if prisoner.countUInt("agent_status", AGENT_STATUS_READY) < prisoner.count() - prisoner.countUInt("agent_status", AGENT_STATUS_MOVEMENT_UNRESOLVED):
       return pyflamegpu.CONTINUE
     return pyflamegpu.EXIT
 
@@ -534,6 +542,10 @@ def make_core_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescr
   agent.newVariableUInt("y_a")
   agent.newVariableFloat("energy")
   agent.newVariableUInt("agent_status", AGENT_STATUS_READY)
+  agent.newState("playing")
+  agent.newState("moving")
+  agent.newState("ready")
+  agent.setInitialState("ready")
   if USE_VISUALISATION:
     agent.newVariableFloat("x")
     agent.newVariableFloat("y")
@@ -670,6 +682,7 @@ def main():
   main_layer4: pyflamegpu.LayerDescription = model.newLayer()
   main_layer4.addSubModel("movement_model")
 
+
   
   simulation: pyflamegpu.CUDASimulation = pyflamegpu.CUDASimulation(model)
 
@@ -758,7 +771,7 @@ def main():
         instance.setVariableArrayUInt('agent_strategies', agent_strategies)
     del x, y, grid, np
     # Set the population for the simulation object
-    simulation.setPopulationData(population)
+    simulation.setPopulationData(population, "ready")
 
   simulation.simulate()
   # Potentially export the population to disk
