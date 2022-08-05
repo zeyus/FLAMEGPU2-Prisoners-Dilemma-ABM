@@ -122,7 +122,7 @@ AGENT_TRAITS: List[int] = list(range(4))
 
 # Should an agent deal differently per variant? (max strategies = number of variants)
 # or, should they have a strategy for same vs different (max strategies = 2)
-AGENT_STRATEGY_PER_TRAIT: bool = False
+AGENT_STRATEGY_PER_TRAIT: bool = True
 
 # Mutation frequency
 AGENT_TRAIT_MUTATION_RATE: float = 0.05
@@ -211,8 +211,9 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_GAME_LIST_FUNC_NAME}, flamegpu::MessageArray2D, fl
     unsigned int num_neighbours = 0;
     unsigned int neighbour_id = 0;
     unsigned int num_responders = 0;
+    bool challenge;
     for (auto &message : FLAMEGPU->message_in.wrap(my_x, my_y, {MAX_PLAY_DISTANCE})) {{
-        bool challenge = false;
+        challenge = false;
         flamegpu::id_t competitor_id = message.getVariable<flamegpu::id_t>("id");
         
         if (competitor_id != flamegpu::ID_NOT_SET) {{
@@ -374,6 +375,8 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageA
         // let's exit and not waste ops.
         return flamegpu::ALIVE;
     }}
+    // here to avoid a runtime exception
+    // even though the message loop always executes
     return flamegpu::ALIVE;
 }}
 """
@@ -542,6 +545,7 @@ def make_core_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescr
   agent.newVariableUInt("y_a")
   agent.newVariableFloat("energy")
   agent.newVariableUInt("agent_status", AGENT_STATUS_READY)
+  agent.newState("default")
   agent.newState("playing")
   agent.newState("moving")
   agent.newState("ready")
@@ -617,6 +621,7 @@ def main():
 
   agent_challenge_fn: pyflamegpu.AgentFunctionDescription = pdgame_subagent.newRTCFunction(CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME, CUDA_AGENT_PLAY_CHALLENGE_FUNC)
   agent_challenge_fn.setMessageOutput("player_challenge_msg")
+  agent_challenge_fn.setMessageOutputOptional(True)
   agent_challenge_fn.setRTCFunctionCondition(CUDA_AGENT_PLAY_CHALLENGE_CONDITION)
 
   agent_response_fn: pyflamegpu.AgentFunctionDescription = pdgame_subagent.newRTCFunction(CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME, CUDA_AGENT_PLAY_RESPONSE_FUNC)
@@ -624,7 +629,7 @@ def main():
   agent_response_fn.setRTCFunctionCondition(CUDA_AGENT_PLAY_RESPONSE_CONDITION)
 
   # the following condition is for playing, not for searching.
-  pdgame_submodel.bindAgent("prisoner", "prisoner", auto_map_vars=True)
+  pdgame_submodel.bindAgent("prisoner", "prisoner", auto_map_vars=True, auto_map_states=True)
 
   pdgame_submodel_layer1: pyflamegpu.LayerDescription = pdgame_model.newLayer()
   pdgame_submodel_layer1.addAgentFunction(agent_challenge_fn)
@@ -659,7 +664,7 @@ def main():
   agent_move_response_fn.setMessageInput("agent_move_request_msg")
   agent_move_response_fn.setRTCFunctionCondition(CUDA_AGENT_MOVE_RESPONSE_CONDITION)
 
-  movement_submodel.bindAgent("prisoner", "prisoner", auto_map_vars=True)
+  movement_submodel.bindAgent("prisoner", "prisoner", auto_map_vars=True, auto_map_states=True)
 
   movement_submodel_layer1: pyflamegpu.LayerDescription = movement_model.newLayer()
   movement_submodel_layer1.addAgentFunction(agent_move_request_fn)
