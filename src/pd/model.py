@@ -277,11 +277,10 @@ CUDA_AGENT_PLAY_CHALLENGE_FUNC: str = rf"""
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::MessageNone, flamegpu::MessageArray2D) {{
     unsigned int game_sequence = FLAMEGPU->getVariable<unsigned int>("game_sequence");
     flamegpu::id_t opponent = FLAMEGPU->getVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("game_list", game_sequence);
-
+    ++game_sequence;
+    FLAMEGPU->setVariable<unsigned int>("game_sequence", game_sequence);
     if (opponent == flamegpu::ID_NOT_SET) {{
       // no opponent in this sequence, move along
-      ++game_sequence;
-      FLAMEGPU->setVariable<unsigned int>("game_sequence", game_sequence);
       return flamegpu::ALIVE;
     }}
 
@@ -301,19 +300,17 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
     if (num_responders + num_challengers <= 0) {{
         // nothing else to do this step
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY});
-    }} else {{
-      // we don't need to waste a variable set op
-      // because responders will be 0, and then the agent wont play
-      // so game sequence is irrelevant.
-      if (num_challengers > 0) {{
-        // we have to accept responses
-        FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_RESPOND});
-      }} else {{
-        FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_PLAYING});
-      }}
-      ++game_sequence;
-      FLAMEGPU->setVariable<unsigned int>("game_sequence", game_sequence);
+        return flamegpu::ALIVE;
     }}
+    // if we have challengers, we need to respond
+    if (num_challengers > 0) {{
+      // we have to accept responses
+      FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_RESPOND});
+    }} else {{
+      // otherwise we indicate that we are still playing (but we can skip challenge responses)
+      FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_PLAYING});
+    }}
+    
     
     FLAMEGPU->setVariable<int8_t>("responders", num_responders);
     
