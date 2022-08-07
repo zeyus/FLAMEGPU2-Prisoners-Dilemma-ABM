@@ -425,7 +425,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
         if (challenge_sequence < {SPACES_WITHIN_RADIUS}) {{
             FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_CHALLENGE});
         }} else {{
-            const uint8_t games_played = FLAMEGPU->setVariable<uint8_t>("games_played");
+            const uint8_t games_played = FLAMEGPU->getVariable<uint8_t>("games_played");
             if (games_played < 1) {{
                 // we've run out of spaces, and no games have been played.
                 // that means that the agent(s) we were to play against have
@@ -459,7 +459,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
     const flamegpu::id_t my_id = FLAMEGPU->getID();
 
     const unsigned int my_bucket = FLAMEGPU->getVariable<unsigned int>("my_bucket");
-    uint8_t games_played = FLAMEGPU->setVariable<uint8_t>("games_played");
+    uint8_t games_played = FLAMEGPU->getVariable<uint8_t>("games_played");
 
     for (const auto& message : FLAMEGPU->message_in(my_bucket)) {{
         const flamegpu::id_t responder_id = message.getVariable<flamegpu::id_t>("responder_id");
@@ -581,7 +581,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESOLVE_FUNC_NAME}, flamegpu::MessageBu
                 return flamegpu::DEAD;
             }}
             FLAMEGPU->setVariable<float>("energy", my_energy);
-            uint8_t games_played = FLAMEGPU->setVariable<uint8_t>("games_played");
+            uint8_t games_played = FLAMEGPU->getVariable<uint8_t>("games_played");
             FLAMEGPU->setVariable<uint8_t>("games_played", ++games_played);
             break;
         }}
@@ -641,7 +641,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME}, flamegpu::Messa
     FLAMEGPU->setVariable<unsigned int>("request_bucket", request_bucket);
 
     FLAMEGPU->message_out.setKey(request_bucket);
-    FLAMEGPU->message_out.setVariable<flamegpu::id_t>("id", my_id);
+    FLAMEGPU->message_out.setVariable<flamegpu::id_t>("requester_id", my_id);
     FLAMEGPU->message_out.setVariable<float>("requester_roll", FLAMEGPU->getVariable<float>("die_roll"));
     FLAMEGPU->message_out.setVariable<unsigned int>("requested_x", new_x);
     FLAMEGPU->message_out.setVariable<unsigned int>("requested_y", new_y);
@@ -1052,7 +1052,7 @@ class exit_play_fn(pyflamegpu.HostFunctionConditionCallback):
       if prisoner.count() > AGENT_HARD_LIMIT:
         return pyflamegpu.EXIT
       #print(prisoner.countUInt("agent_status", AGENT_STATUS_SKIP_RESPONSE))
-      if prisoner.countUInt("agent_status", AGENT_STATUS_READY) < prisoner.count() - prisoner.countUInt("agent_status", AGENT_STATUS_MOVEMENT_UNRESOLVED):
+      if prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_CHALLENGE) or prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_RESPOND):
         return pyflamegpu.CONTINUE
     self.iterations = 0
     return pyflamegpu.EXIT
@@ -1102,7 +1102,7 @@ class exit_god_fn(pyflamegpu.HostFunctionConditionCallback):
     self.iterations += 1
     if self.iterations < self.max_iterations:
       prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
-      print(prisoner.count())
+      # print(prisoner.count())
       if prisoner.countUInt("agent_status", AGENT_STATUS_ATTEMPTING_REPRODUCTION) and prisoner.count() < AGENT_HARD_LIMIT:
         return pyflamegpu.CONTINUE
     self.iterations = 0
@@ -1299,7 +1299,7 @@ def main():
   movement_model.addExitConditionCallback(exit_move_fn().__disown__())
   
   move_request_msg: pyflamegpu.MessageBucket_Description = movement_model.newMessageBucket("agent_move_request_msg")
-  move_request_msg.newVariableID("id")
+  move_request_msg.newVariableID("requester_id")
   move_request_msg.newVariableFloat("requester_roll")
   move_request_msg.newVariableUInt("requested_x")
   move_request_msg.newVariableUInt("requested_y")
