@@ -121,9 +121,11 @@ AGENT_STATUS_NEW_AGENT: int = 4096
 
 # Agent strategies for the PD game
 # "proportion" let's you say how likely agents spawn with a particular strategy
-AGENT_STRATEGY_COOP = 0
-AGENT_STRATEGY_DEFECT = 1
-AGENT_STRATEGY_TIT_FOR_TAT = 2
+AGENT_STRATEGY_COOP: int = 0
+AGENT_STRATEGY_DEFECT: int = 1
+AGENT_STRATEGY_TIT_FOR_TAT: int = 2
+AGENT_STRATEGY_RANDOM: int = 3
+
 AGENT_STRATEGIES: dict = {
     "always_coop": {
         "name": "always_coop",
@@ -142,7 +144,7 @@ AGENT_STRATEGIES: dict = {
     },
     "random": {
       "name": "random",
-      "id": 3,
+      "id": AGENT_STRATEGY_RANDOM,
       "proportion": 1/4,
     },
 }
@@ -477,11 +479,11 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
             bool i_coop;
             bool challenger_coop;
 
-            if (challenger_strategy == {AGENT_STRATEGIES["always_coop"]["id"]}) {{
+            if (challenger_strategy == {AGENT_STRATEGY_COOP}) {{
                 challenger_coop = true;
-            }} else if (challenger_strategy == {AGENT_STRATEGIES["always_defect"]["id"]}) {{
+            }} else if (challenger_strategy == {AGENT_STRATEGY_DEFECT}) {{
                 challenger_coop = false;
-            }} else if (challenger_strategy == {AGENT_STRATEGIES["tit_for_tat"]["id"]}) {{
+            }} else if (challenger_strategy == {AGENT_STRATEGY_TIT_FOR_TAT}) {{
                 const flamegpu::id_t challenger_last_opponent = message.getVariable<flamegpu::id_t>("challenger_game_memory_id");
                 if (challenger_last_opponent == my_id) {{
                     const uint8_t challenger_last_opponent_choice = message.getVariable<uint8_t>("challenger_game_memory_choice");
@@ -490,7 +492,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
                     // default to defect? generous tit for tat can start with coop?
                     challenger_coop = false;
                 }}
-            }} else if (challenger_strategy == {AGENT_STRATEGIES["random"]["id"]}) {{
+            }} else if (challenger_strategy == {AGENT_STRATEGY_RANDOM}) {{
                 if (challenger_roll > 0.5) {{
                     challenger_coop = true;
                 }} else {{
@@ -502,11 +504,11 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
                 challenger_coop = !challenger_coop;
             }}
 
-            if (my_strategy == {AGENT_STRATEGIES["always_coop"]["id"]}) {{
+            if (my_strategy == {AGENT_STRATEGY_COOP}) {{
                 i_coop = true;
-            }} else if (my_strategy == {AGENT_STRATEGIES["always_defect"]["id"]}) {{
+            }} else if (my_strategy == {AGENT_STRATEGY_DEFECT}) {{
                 i_coop = false;
-            }} else if (my_strategy == {AGENT_STRATEGIES["tit_for_tat"]["id"]}) {{
+            }} else if (my_strategy == {AGENT_STRATEGY_TIT_FOR_TAT}) {{
                 flamegpu::id_t previous_opponent = FLAMEGPU->getVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("game_memory", response_sequence);
                 if (previous_opponent == challenger_id) {{
                     const uint8_t previous_opponent_choice = FLAMEGPU->getVariable<uint8_t, {SPACES_WITHIN_RADIUS}>("game_memory_choices", response_sequence);
@@ -524,7 +526,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
                     FLAMEGPU->setVariable<uint8_t, {SPACES_WITHIN_RADIUS}>("game_memory_choices", response_sequence, {AGENT_RESULT_DEFECT});
                 }}
                 
-            }} else if (my_strategy == {AGENT_STRATEGIES["random"]["id"]}) {{
+            }} else if (my_strategy == {AGENT_STRATEGY_RANDOM}) {{
                 if (my_roll > 0.5) {{
                     i_coop = true;
                 }} else {{
@@ -620,7 +622,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESOLVE_FUNC_NAME}, flamegpu::MessageBu
             uint8_t games_played = FLAMEGPU->getVariable<uint8_t>("games_played");
             FLAMEGPU->setVariable<uint8_t>("games_played", ++games_played);
             const uint8_t my_strategy = message.getVariable<uint8_t>("challenger_strategy");
-            if (my_strategy == {AGENT_STRATEGIES["tit_for_tat"]["id"]}) {{
+            if (my_strategy == {AGENT_STRATEGY_TIT_FOR_TAT}) {{
                 const uint8_t challenge_sequence = FLAMEGPU->getVariable<uint8_t>("challenge_sequence") - 1;
                 FLAMEGPU->setVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("game_memory", challenge_sequence, message.getVariable<flamegpu::id_t>("responder_id"));
                 FLAMEGPU->setVariable<uint8_t, {SPACES_WITHIN_RADIUS}>("game_memory_choices", challenge_sequence, message.getVariable<uint8_t>("responder_response"));
