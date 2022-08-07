@@ -1,4 +1,4 @@
-# FLAMEGPU2 Based Prisoner's Dilemma Agent Based Model Simulation
+# FLAMEGPU2 Based Prisoner's Dilemma ABM
 ## Introduction
 
 Info and instrctions coming soon...(after submission!)
