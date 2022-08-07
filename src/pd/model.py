@@ -331,16 +331,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_GAME_LIST_FUNC_NAME}, flamegpu::MessageBucket, fla
 
     // If there are no neighbours, it's time to move, otherwise let's play a game.
     if (num_neighbours == 0) {{
-        float my_energy = FLAMEGPU->getVariable<float>("energy");
-        float travel_cost = FLAMEGPU->environment.getProperty<float>("travel_cost");
-        // try and deduct travel cost, die if below zero, this will prevent
-        // unnecessary movement requests
-        my_energy -= travel_cost;
-        if (my_energy <= 0.0) {{
-            return flamegpu::DEAD;
-        }}
-        FLAMEGPU->setVariable<float>("energy", my_energy);
-        // we have to move
+        
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_MOVEMENT_UNRESOLVED});
         return flamegpu::ALIVE;
     }}
@@ -532,6 +523,8 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
                 my_energy = max_energy;
             }}
             FLAMEGPU->setVariable<float>("energy", my_energy);
+            uint8_t games_played = FLAMEGPU->setVariable<uint8_t>("games_played");
+            FLAMEGPU->setVariable<uint8_t>("games_played", ++games_played);
             break;
         }}
     }}
@@ -570,6 +563,8 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESOLVE_FUNC_NAME}, flamegpu::MessageBu
                 return flamegpu::DEAD;
             }}
             FLAMEGPU->setVariable<float>("energy", my_energy);
+            uint8_t games_played = FLAMEGPU->setVariable<uint8_t>("games_played");
+            FLAMEGPU->setVariable<uint8_t>("games_played", ++games_played);
             break;
         }}
     }}
@@ -604,7 +599,18 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME}, flamegpu::Messa
     unsigned int new_x;
     unsigned int new_y;
     // try to limit the need for calling random.
+    // @TODO: FIX HACK
     if (last_move_attempt >= {SPACES_WITHIN_RADIUS}) {{
+        float my_energy = FLAMEGPU->getVariable<float>("energy");
+        float travel_cost = FLAMEGPU->environment.getProperty<float>("travel_cost");
+        // try and deduct travel cost, die if below zero, this will prevent
+        // unnecessary movement requests
+        my_energy -= travel_cost;
+        if (my_energy <= 0.0) {{
+            return flamegpu::DEAD;
+        }}
+        FLAMEGPU->setVariable<float>("energy", my_energy);
+        
       // this will give us 0 to 7
       last_move_attempt = FLAMEGPU->random.uniform<unsigned int>(0, {SPACES_WITHIN_RADIUS_ZERO_INDEXED});
     }}
@@ -1107,6 +1113,7 @@ def add_pdgame_vars(agent: pyflamegpu.AgentDescription) -> None:
   agent.newVariableUInt("challenge_sequence", 0)
   agent.newVariableUInt("response_sequence", SPACES_WITHIN_RADIUS)
   agent.newVariableUInt8("round_resolved", 0)
+  agent.newVariableUInt8("games_played", 0)
 
 def add_pdgame_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
   env.newPropertyFloat("payoff_cc", PAYOFF_CC, isConst=True)
@@ -1122,6 +1129,7 @@ def add_movement_vars(agent: pyflamegpu.AgentDescription) -> None:
 
 def add_movement_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
   env.newMacroPropertyUInt("move_requests", ENV_MAX, ENV_MAX)
+  env.newPropertyFloat("travel_cost", AGENT_TRAVEL_COST, isConst=True)
   
 
 def add_god_vars(agent: pyflamegpu.AgentDescription) -> None:
@@ -1162,7 +1170,6 @@ def main():
   model: pyflamegpu.ModelDescription = pyflamegpu.ModelDescription("prisoners_dilemma")
   env: pyflamegpu.EnvironmentDescription = model.Environment()
   add_env_vars(env)
-  env.newPropertyFloat("travel_cost", AGENT_TRAVEL_COST, isConst=True)
   env.newPropertyFloat("cost_of_living", COST_OF_LIVING, isConst=True)
   env.newPropertyUInt("max_agents", AGENT_HARD_LIMIT, isConst=True)
   env.newPropertyFloat("max_energy", MAX_ENERGY, isConst=True)
@@ -1181,8 +1188,7 @@ def main():
 
   agent_game_list_fn: pyflamegpu.AgentFunctionDescription = agent.newRTCFunction(CUDA_GAME_LIST_FUNC_NAME, CUDA_GAME_LIST_FUNC)
   agent_game_list_fn.setMessageInput("player_search_msg")
-  # Agents can die if they should travel, but don't have enough energy to do so
-  agent_game_list_fn.setAllowAgentDeath(True)
+  
 
   agent_environmental_punishment_fn: pyflamegpu.AgentFunctionDescription = agent.newRTCFunction(CUDA_ENVIRONMENTAL_PUNISHMENT_NAME, CUDA_ENVIRONMENTAL_PUNISHMENT_FUNCTION)
   agent_environmental_punishment_fn.setAllowAgentDeath(True)
@@ -1275,6 +1281,8 @@ def main():
   agent_move_request_fn: pyflamegpu.AgentFunctionDescription = movement_subagent.newRTCFunction(CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME, CUDA_AGENT_MOVE_REQUEST_FUNCTION)
   agent_move_request_fn.setMessageOutput("agent_move_request_msg")
   agent_move_request_fn.setRTCFunctionCondition(CUDA_AGENT_MOVE_REQUEST_CONDITION)
+  # Agents can die if they should travel, but don't have enough energy to do so
+  agent_move_request_fn.setAllowAgentDeath(True)
 
   agent_move_response_fn: pyflamegpu.AgentFunctionDescription = movement_subagent.newRTCFunction(CUDA_AGENT_MOVE_RESPONSE_FUNCTION_NAME, CUDA_AGENT_MOVE_RESPONSE_FUNCTION)
   agent_move_response_fn.setMessageInput("agent_move_request_msg")
