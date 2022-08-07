@@ -128,23 +128,23 @@ AGENT_STRATEGIES: dict = {
     "always_coop": {
         "name": "always_coop",
         "id": AGENT_STRATEGY_COOP,
-        "proportion": 1/3,
+        "proportion": 1/4,
     },
     "always_defect": {
         "name": "always_defect",
         "id": AGENT_STRATEGY_DEFECT,
-        "proportion": 1/3,
+        "proportion": 1/4,
     },
     "tit_for_tat": {
         "name": "tit_for_tat",
         "id": AGENT_STRATEGY_TIT_FOR_TAT,
-        "proportion": 1/3,
+        "proportion": 1/4,
     },
-    # "random": {
-    #   "name": "random",
-    #   "id": 3,
-    #   "proportion": 0.10,
-    # },
+    "random": {
+      "name": "random",
+      "id": 3,
+      "proportion": 1/4,
+    },
 }
 
 # How many variants of agents are there?
@@ -177,14 +177,14 @@ BUCKET_SIZE: int = ENV_MAX**2
 
 # Generate weights based on strategy configuration
 AGENT_WEIGHTS: List[float] = [AGENT_STRATEGIES[strategy]
-                              ["proportion"] for strategy in AGENT_STRATEGIES]
+                              ["proportion"] for strategy in AGENT_STRATEGIES]  # type: ignore
 # generate strategy IDs based on strategy configuration
 AGENT_STRATEGY_IDS: List[int] = [
-    AGENT_STRATEGIES[strategy]["id"] for strategy in AGENT_STRATEGIES]
+    AGENT_STRATEGIES[strategy]["id"] for strategy in AGENT_STRATEGIES]  # type: ignore
 
 # definie color pallete for each agent strategy, with fallback to white
 AGENT_COLOR_SCHEME: pyflamegpu.uDiscreteColor = pyflamegpu.uDiscreteColor(
-    "agent_trait", pyflamegpu.SET1, pyflamegpu.WHITE)
+    "agent_color", pyflamegpu.SET1, pyflamegpu.WHITE)
 AGENT_DEFAULT_SHAPE: str = './src/resources/models/primitive_pyramid.obj'
 AGENT_DEFAULT_SCALE: float = 0.9
 # Roll if we need to rotate the agents 270 degrees
@@ -200,30 +200,6 @@ SPACES_WITHIN_RADIUS: int = SPACES_WITHIN_RADIUS_INCL - 1
 SPACES_WITHIN_RADIUS_ZERO_INDEXED: int = SPACES_WITHIN_RADIUS - 1
 CENTER_SPACE: int = SPACES_WITHIN_RADIUS // 2
 
-
-# CUDA_FY_SHUFFLE_FUNCTION_NAME: str = "fy_shuffle"
-# CUDA_FY_SHUFFLE_FUNCTION: str = rf"""
-# #ifndef SPACES_WITHIN
-# #define SPACES_WITHIN {SPACES_WITHIN_RADIUS}
-# #include <random>
-# FLAMEGPU_HOST_DEVICE_FUNCTION void {CUDA_FY_SHUFFLE_FUNCTION_NAME}() {{
-#   uint8_t arr[SPACES_WITHIN];
-#   uint8_t idx_arr[SPACES_WITHIN];
-#   for (uint8_t i = 0; i < SPACES_WITHIN; i++) {{
-#     arr[i] = i;
-#     idx_arr[i] = 0;
-#   }}
-#   uint8_t idx;
-#   for (uint8_t i = 0; i < SPACES_WITHIN; i++) {{
-#     do {{
-#       uint8_t idx = rand() % SPACES_WITHIN;
-#     }} while (idx_arr[idx] != 0);
-#     idx_arr[idx] = 1;
-#     arr[i] = arr[idx];
-#   }}
-# }}
-# #endif
-# """
 # general function that returns the new position based on the index/sequence of a wrapped moore neighborhood iterator.
 CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME: str = "pos_from_moore_seq"
 CUDA_POS_FROM_MOORE_SEQ_FUNCTION: str = rf"""
@@ -371,10 +347,10 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
     FLAMEGPU->setVariable<uint8_t>("round_resolved", 0);
     const unsigned int env_max = FLAMEGPU->environment.getProperty<unsigned int>("env_max");
 
-    unsigned int challenge_sequence = FLAMEGPU->getVariable<unsigned int>("challenge_sequence");
-    const unsigned int response_sequence = {SPACES_WITHIN_RADIUS} - challenge_sequence - 1;
+    uint8_t challenge_sequence = FLAMEGPU->getVariable<uint8_t>("challenge_sequence");
+    const uint8_t response_sequence = {SPACES_WITHIN_RADIUS} - challenge_sequence - 1;
 
-    FLAMEGPU->setVariable<unsigned int>("response_sequence", response_sequence);
+    FLAMEGPU->setVariable<uint8_t>("response_sequence", response_sequence);
 
     const int8_t my_challenge_action = FLAMEGPU->getVariable<int8_t, {SPACES_WITHIN_RADIUS}>("my_actions", challenge_sequence);
     const int8_t my_response_action = FLAMEGPU->getVariable<int8_t, {SPACES_WITHIN_RADIUS}>("my_actions", response_sequence);
@@ -384,7 +360,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
     // if it's 1, I challenge, if it's 0, I respond
     if (!my_challenge && !my_response) {{
         FLAMEGPU->setVariable<uint8_t>("round_resolved", 1);
-        FLAMEGPU->setVariable<unsigned int>("challenge_sequence", ++challenge_sequence);
+        FLAMEGPU->setVariable<uint8_t>("challenge_sequence", ++challenge_sequence);
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_CHALLENGE});
         // just send the communication to a bucket that wont be read
         const unsigned int trash_bin = FLAMEGPU->environment.getProperty<unsigned int>("trash_bin");
@@ -392,7 +368,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
         return flamegpu::ALIVE;
     }} else if (!my_challenge && my_response) {{
         // we don't need to send out a challenge, so just leave here
-        FLAMEGPU->setVariable<unsigned int>("challenge_sequence", ++challenge_sequence);
+        FLAMEGPU->setVariable<uint8_t>("challenge_sequence", ++challenge_sequence);
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_RESPOND});
         // just send the communication to a bucket that wont be read
         const unsigned int trash_bin = FLAMEGPU->environment.getProperty<unsigned int>("trash_bin");
@@ -407,7 +383,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
     if (my_challenge) {{
         const unsigned int my_x = FLAMEGPU->getVariable<unsigned int>("x_a");
         const unsigned int my_y = FLAMEGPU->getVariable<unsigned int>("y_a");
-        const flamegpu::id_t my_id = FLAMEGPU->getVariable<flamegpu::id_t>("id");
+        const flamegpu::id_t my_id = FLAMEGPU->getID();
         const flamegpu::id_t responder_id = FLAMEGPU->getVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("neighbour_list", challenge_sequence);
         unsigned int neighbour_x;
         unsigned int neighbour_y;
@@ -418,10 +394,12 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
         FLAMEGPU->message_out.setVariable<flamegpu::id_t>("responder_id", responder_id);
         
         for (unsigned int i = 0; i < {AGENT_TRAIT_COUNT}; ++i) {{
-            FLAMEGPU->message_out.setVariable<unsigned int, {AGENT_TRAIT_COUNT}>("challenger_strategies", i, FLAMEGPU->getVariable<unsigned int, {AGENT_TRAIT_COUNT}>("agent_strategies", i));
+            FLAMEGPU->message_out.setVariable<uint8_t, {AGENT_TRAIT_COUNT}>("challenger_strategies", i, FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i));
         }}
 
-        FLAMEGPU->message_out.setVariable<flamegpu::id_t>("challenger_trait", FLAMEGPU->getVariable<unsigned int>("agent_trait"));
+        FLAMEGPU->message_out.setVariable<uint8_t>("challenger_trait", FLAMEGPU->getVariable<uint8_t>("agent_trait"));
+        FLAMEGPU->message_out.setVariable<flamegpu::id_t>("challenger_game_memory_id", FLAMEGPU->getVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("game_memory", challenge_sequence));
+        FLAMEGPU->message_out.setVariable<uint8_t>("challenger_game_memory_choice", FLAMEGPU->getVariable<uint8_t, {SPACES_WITHIN_RADIUS}>("game_memory_choices", challenge_sequence));
         FLAMEGPU->message_out.setVariable<unsigned int>("challenger_energy", FLAMEGPU->getVariable<float>("energy"));
         FLAMEGPU->message_out.setVariable<unsigned int>("challenger_x", my_x);
         FLAMEGPU->message_out.setVariable<unsigned int>("challenger_y", my_y);
@@ -448,7 +426,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
         }}
     }}
 
-    FLAMEGPU->setVariable<unsigned int>("challenge_sequence", ++challenge_sequence);
+    FLAMEGPU->setVariable<uint8_t>("challenge_sequence", ++challenge_sequence);
       
     
     
@@ -475,30 +453,17 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
     for (const auto& message : FLAMEGPU->message_in(my_bucket)) {{
         const flamegpu::id_t responder_id = message.getVariable<flamegpu::id_t>("responder_id");
         if (responder_id == my_id) {{
+            const uint8_t response_sequence = FLAMEGPU->getVariable<uint8_t>("response_sequence");
             const flamegpu::id_t challenger_id = message.getVariable<flamegpu::id_t>("challenger_id");
             
-            const unsigned int challenger_trait = message.getVariable<unsigned int>("challenger_trait");
-            const unsigned int my_trait = FLAMEGPU->getVariable<unsigned int>("agent_trait");
+            const uint8_t challenger_trait = message.getVariable<uint8_t>("challenger_trait");
+            const uint8_t my_trait = FLAMEGPU->getVariable<uint8_t>("agent_trait");
             
-            const unsigned int my_strategy = FLAMEGPU->getVariable<unsigned int, {AGENT_TRAIT_COUNT}>("agent_strategies", challenger_trait);
-            const unsigned int challenger_strategy = message.getVariable<unsigned int, {AGENT_TRAIT_COUNT}>("challenger_strategies", my_trait);
+            const uint8_t my_strategy = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", challenger_trait);
+            const uint8_t challenger_strategy = message.getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("challenger_strategies", my_trait);
             
             float challenger_energy = message.getVariable<float>("challenger_energy");
             float my_energy = FLAMEGPU->getVariable<float>("energy");
-
-            bool i_coop;
-            bool challenger_coop;
-
-            if (my_strategy == {AGENT_STRATEGIES["always_coop"]["id"]}) {{
-                i_coop = true;
-            }} else if (my_strategy == {AGENT_STRATEGIES["always_defect"]["id"]}) {{
-                i_coop = false;
-            }}
-            if (challenger_strategy == {AGENT_STRATEGIES["always_coop"]["id"]}) {{
-                challenger_coop = true;
-            }} else if (challenger_strategy == {AGENT_STRATEGIES["always_defect"]["id"]}) {{
-                challenger_coop = false;
-            }}
             
             const float payoff_cc = FLAMEGPU->environment.getProperty<float>("payoff_cc");
             const float payoff_cd = FLAMEGPU->environment.getProperty<float>("payoff_cd");
@@ -508,16 +473,70 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
 
             const float my_roll = FLAMEGPU->getVariable<float>("die_roll");
             const float challenger_roll = message.getVariable<float>("challenger_roll");
+            
+            bool i_coop;
+            bool challenger_coop;
 
-            // flip my choice if my roll below noise
-            if (my_roll < env_noise) {{
-                i_coop = !i_coop;
+            if (challenger_strategy == {AGENT_STRATEGIES["always_coop"]["id"]}) {{
+                challenger_coop = true;
+            }} else if (challenger_strategy == {AGENT_STRATEGIES["always_defect"]["id"]}) {{
+                challenger_coop = false;
+            }} else if (challenger_strategy == {AGENT_STRATEGIES["tit_for_tat"]["id"]}) {{
+                const flamegpu::id_t challenger_last_opponent = message.getVariable<flamegpu::id_t>("challenger_game_memory_id");
+                if (challenger_last_opponent == my_id) {{
+                    const uint8_t challenger_last_opponent_choice = message.getVariable<uint8_t>("challenger_game_memory_choice");
+                    challenger_coop = challenger_last_opponent_choice == {AGENT_RESULT_COOP};
+                }} else {{
+                    // default to defect? generous tit for tat can start with coop?
+                    challenger_coop = false;
+                }}
+            }} else if (challenger_strategy == {AGENT_STRATEGIES["random"]["id"]}) {{
+                if (challenger_roll > 0.5) {{
+                    challenger_coop = true;
+                }} else {{
+                    challenger_coop = false;
+                }}
             }}
             // flip challenger choice if challenger roll below noise
             if (challenger_roll < env_noise) {{
                 challenger_coop = !challenger_coop;
             }}
 
+            if (my_strategy == {AGENT_STRATEGIES["always_coop"]["id"]}) {{
+                i_coop = true;
+            }} else if (my_strategy == {AGENT_STRATEGIES["always_defect"]["id"]}) {{
+                i_coop = false;
+            }} else if (my_strategy == {AGENT_STRATEGIES["tit_for_tat"]["id"]}) {{
+                flamegpu::id_t previous_opponent = FLAMEGPU->getVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("game_memory", response_sequence);
+                if (previous_opponent == challenger_id) {{
+                    const uint8_t previous_opponent_choice = FLAMEGPU->getVariable<uint8_t, {SPACES_WITHIN_RADIUS}>("game_memory_choices", response_sequence);
+                    i_coop = previous_opponent_choice == {AGENT_RESULT_COOP};
+                }} else {{
+                    // default to defect? generous tit for tat can start with coop?
+                    i_coop = false;
+                    previous_opponent = challenger_id;
+                    FLAMEGPU->setVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("game_memory", response_sequence, previous_opponent);
+                    
+                }}
+                if (challenger_coop) {{
+                    FLAMEGPU->setVariable<uint8_t, {SPACES_WITHIN_RADIUS}>("game_memory_choices", response_sequence, {AGENT_RESULT_COOP});
+                }} else {{
+                    FLAMEGPU->setVariable<uint8_t, {SPACES_WITHIN_RADIUS}>("game_memory_choices", response_sequence, {AGENT_RESULT_DEFECT});
+                }}
+                
+            }} else if (my_strategy == {AGENT_STRATEGIES["random"]["id"]}) {{
+                if (my_roll > 0.5) {{
+                    i_coop = true;
+                }} else {{
+                    i_coop = false;
+                }}
+            }}
+            // @TODO: add new random number here and above otherwise the conditions always come together
+            // flip my choice if my roll below noise
+            if (my_roll < env_noise) {{
+                i_coop = !i_coop;
+            }}
+            
             // 4 possible outcomes
             if (i_coop && challenger_coop) {{
                 challenger_energy += payoff_cc;
@@ -545,13 +564,19 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
                 my_energy = max_energy;
             }}
             FLAMEGPU->setVariable<float>("energy", my_energy);
+
+            if (i_coop) {{
+                FLAMEGPU->message_out.setVariable<uint8_t>("responder_response", {AGENT_RESULT_COOP});
+            }} else {{
+                FLAMEGPU->message_out.setVariable<uint8_t>("responder_response", {AGENT_RESULT_DEFECT});
+            }}
             
             FLAMEGPU->setVariable<uint8_t>("games_played", ++games_played);
             break;
         }}
     }}
 
-    const unsigned int challenge_sequence = FLAMEGPU->getVariable<unsigned int>("challenge_sequence");
+    const uint8_t challenge_sequence = FLAMEGPU->getVariable<uint8_t>("challenge_sequence");
     if (challenge_sequence < {SPACES_WITHIN_RADIUS}) {{
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_CHALLENGE});
     }} else {{
@@ -594,6 +619,13 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESOLVE_FUNC_NAME}, flamegpu::MessageBu
             FLAMEGPU->setVariable<float>("energy", my_energy);
             uint8_t games_played = FLAMEGPU->getVariable<uint8_t>("games_played");
             FLAMEGPU->setVariable<uint8_t>("games_played", ++games_played);
+            const uint8_t my_strategy = message.getVariable<uint8_t>("challenger_strategy");
+            if (my_strategy == {AGENT_STRATEGIES["tit_for_tat"]["id"]}) {{
+                const uint8_t challenge_sequence = FLAMEGPU->getVariable<uint8_t>("challenge_sequence") - 1;
+                FLAMEGPU->setVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("game_memory", challenge_sequence, message.getVariable<flamegpu::id_t>("responder_id"));
+                FLAMEGPU->setVariable<uint8_t, {SPACES_WITHIN_RADIUS}>("game_memory_choices", challenge_sequence, message.getVariable<uint8_t>("responder_response"));
+            }}
+            
             break;
         }}
     }}
@@ -934,7 +966,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME}, flamegpu::Messa
       FLAMEGPU->agent_out.setVariable<unsigned int>("x_a", requested_x);
       FLAMEGPU->agent_out.setVariable<unsigned int>("y_a", requested_y);
 
-      FLAMEGPU->agent_out.setVariable<unsigned int>("agent_trait", FLAMEGPU->getVariable<unsigned int>("agent_trait"));
+      FLAMEGPU->agent_out.setVariable<uint8_t>("agent_trait", FLAMEGPU->getVariable<uint8_t>("agent_trait"));
       const float init_energy_min = FLAMEGPU->environment.getProperty<float>("init_energy_min");
       const float max_energy = FLAMEGPU->environment.getProperty<float>("max_energy");
       float child_energy = 0.0;
@@ -960,7 +992,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME}, flamegpu::Messa
       FLAMEGPU->agent_out.setVariable<float>("energy", child_energy);
 
       for (int i = 0; i < {AGENT_TRAIT_COUNT}; i++) {{
-        FLAMEGPU->agent_out.setVariable<unsigned int, {AGENT_TRAIT_COUNT}>("agent_strategies", i, FLAMEGPU->getVariable<unsigned int, {AGENT_TRAIT_COUNT}>("agent_strategies", i));
+        FLAMEGPU->agent_out.setVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i, FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i));
       }}
       FLAMEGPU->agent_out.setVariable<unsigned int>("agent_status", {AGENT_STATUS_NEW_AGENT});
       uint8_t agents_spawned = FLAMEGPU->getVariable<uint8_t>("agents_spawned");
@@ -1132,8 +1164,10 @@ def make_core_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescr
     agent.newVariableUInt("y_a")
     agent.newVariableFloat("energy")
     agent.newVariableUInt("agent_status", AGENT_STATUS_READY)
-    agent.newVariableUInt("agent_trait")
-    agent.newVariableArrayUInt("agent_strategies", AGENT_TRAIT_COUNT)
+    agent.newVariableUInt8("agent_trait")
+    # this allows flexible setting of agent colors
+    agent.newVariableUInt("agent_color")
+    agent.newVariableArrayUInt8("agent_strategies", AGENT_TRAIT_COUNT)
     agent.newVariableArrayID("neighbour_list", SPACES_WITHIN_RADIUS, [
                              pyflamegpu.ID_NOT_SET] * SPACES_WITHIN_RADIUS)
     agent.newVariableArrayFloat("neighbour_rolls", SPACES_WITHIN_RADIUS, [
@@ -1141,7 +1175,7 @@ def make_core_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescr
     # @TODO: flesh out? for now -1 = no neighbour, 0 = I respond, 1 = I challenge
     agent.newVariableArrayInt8(
         "my_actions", SPACES_WITHIN_RADIUS, [-1] * SPACES_WITHIN_RADIUS)
-    agent.newVariableFloat("die_roll", 0.0)
+    agent.newVariableFloat("die_roll", 0.0)  # type: ignore
     agent.newVariableUInt("my_bucket", 0)
 
     if USE_VISUALISATION:
@@ -1166,8 +1200,8 @@ def add_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
 
 def add_pdgame_vars(agent: pyflamegpu.AgentDescription) -> None:
     # add variable for tracking which neighbour is the target
-    agent.newVariableUInt("challenge_sequence", 0)
-    agent.newVariableUInt("response_sequence", SPACES_WITHIN_RADIUS)
+    agent.newVariableUInt8("challenge_sequence", 0)
+    agent.newVariableUInt8("response_sequence", SPACES_WITHIN_RADIUS)
     agent.newVariableUInt8("round_resolved", 0)
     agent.newVariableUInt8("games_played", 0)
     add_agent_memory(agent)
@@ -1282,14 +1316,16 @@ def main():
         "player_challenge_msg")
     challenge_message.newVariableID("challenger_id")
     challenge_message.newVariableID("responder_id")
-    challenge_message.newVariableArrayUInt(
+    challenge_message.newVariableArrayUInt8(
         "challenger_strategies", AGENT_TRAIT_COUNT)
-    challenge_message.newVariableUInt("challenger_trait")
+    challenge_message.newVariableUInt8("challenger_trait")
     challenge_message.newVariableFloat("challenger_energy")
     challenge_message.newVariableFloat("challenger_roll")
     challenge_message.newVariableUInt("challenger_x")
     challenge_message.newVariableUInt("challenger_bucket")
     challenge_message.newVariableUInt("challenger_y")
+    challenge_message.newVariableID("challenger_game_memory_id")
+    challenge_message.newVariableUInt8("challenger_game_memory_choice")
     challenge_message.setBounds(0, BUCKET_SIZE)
 
     resolve_message: pyflamegpu.MessageBucket_Description = pdgame_model.newMessageBucket(
@@ -1297,6 +1333,8 @@ def main():
     resolve_message.newVariableID("challenger_id")
     resolve_message.newVariableID("responder_id")
     resolve_message.newVariableFloat("challenger_energy")
+    resolve_message.newVariableUInt8("challenger_strategy")
+    resolve_message.newVariableUInt8("responder_response")
     resolve_message.setBounds(0, BUCKET_SIZE)
 
     pdgame_env: pyflamegpu.EnvironmentDescription = pdgame_model.Environment()
@@ -1484,43 +1522,21 @@ def main():
     main_layer3: pyflamegpu.LayerDescription = model.newLayer()
     main_layer3.addSubModel("pdgame_model")
 
-    # Layer #4: neighbourhood submodel
-    # main_layer4: pyflamegpu.LayerDescription = model.newLayer()
-    # main_layer4.addSubModel("neighbourhood_model")
+    # Layer #4: movement submodel
+    main_layer4: pyflamegpu.LayerDescription = model.newLayer()
+    main_layer4.addSubModel("movement_model")
 
-    # Layer #5: movement submodel
+    # Layer #5: neighbourhood submodel
     main_layer5: pyflamegpu.LayerDescription = model.newLayer()
-    main_layer5.addSubModel("movement_model")
+    main_layer5.addSubModel("neighbourhood_model")
 
-    # Layer #6: neighbourhood submodel
+    # Layer #6: god submodel
     main_layer6: pyflamegpu.LayerDescription = model.newLayer()
-    main_layer6.addSubModel("neighbourhood_model")
+    main_layer6.addSubModel("god_model")
 
-    # Layer #7: god submodel
+    # Layer #6: Delete agents over hard limit, deduct environmental cost
     main_layer7: pyflamegpu.LayerDescription = model.newLayer()
-    main_layer7.addSubModel("god_model")
-
-    main_layer8: pyflamegpu.LayerDescription = model.newLayer()
-    main_layer8.addAgentFunction(agent_environmental_punishment_fn)
-
-    # this doesn't work because it only shows defined dependencies
-    # of which there are none.
-    # graph: pyflamegpu.DependencyGraph = model.getDependencyGraph()
-    # graph.addRoot(agent_search_fn)
-    # graph.addRoot(agent_game_list_fn)
-    # graph.addRoot(pdgame_submodel)
-    # graph.addRoot(agent_challenge_fn)
-    # graph.addRoot(agent_response_fn)
-    # graph.addRoot(agent_resolve_fn)
-    # graph.addRoot(movement_submodel)
-    # graph.addRoot(agent_move_request_fn)
-    # graph.addRoot(agent_move_response_fn)
-
-    # graph.addRoot(god_submodel)
-    # graph.addRoot(agent_god_go_forth_fn)
-    # graph.addRoot(agent_god_multiply_fn)
-    # graph.addRoot(agent_god_then_die_fn)
-    # graph.generateDOTDiagram("graphdiagram.gv")
+    main_layer7.addAgentFunction(agent_environmental_punishment_fn)
 
     simulation: pyflamegpu.CUDASimulation = pyflamegpu.CUDASimulation(model)
 
@@ -1574,7 +1590,7 @@ def main():
         grid = np.reshape(grid, (ENV_MAX, ENV_MAX))
         # Iterate the population, initialising per-agent values
         instance: pyflamegpu.AgentVector_Agent
-        for i, instance in enumerate(population):
+        for i, instance in enumerate(population):  # type: ignore
             # find agent position in grid
             pos = np.where(grid == i)
             x = pos[0][0].item()
@@ -1592,11 +1608,13 @@ def main():
             instance.setVariableFloat("energy", energy)
             # select agent strategy
             agent_trait: int = random.choice(AGENT_TRAITS)
-            instance.setVariableUInt("agent_trait", agent_trait)
+            instance.setVariableUInt8("agent_trait", agent_trait)
+            # this could be based on strategy, or change during runtime!
+            instance.setVariableUInt("agent_color", agent_trait)
             # select agent strategy
             if AGENT_STRATEGY_PER_TRAIT:
                 # if we are using a per-trait strategy, then pick random weighted strategies
-                instance.setVariableArrayUInt('agent_strategies', random.choices(
+                instance.setVariableArrayUInt8('agent_strategies', random.choices(
                     AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=AGENT_TRAIT_COUNT))
             else:
                 # otherwise, we need a strategy for agents with matching traits
@@ -1612,7 +1630,7 @@ def main():
                         agent_strategies.append(strategy_my)
                     else:
                         agent_strategies.append(strategy_other)
-                instance.setVariableArrayUInt(
+                instance.setVariableArrayUInt8(
                     'agent_strategies', agent_strategies)
         del x, y, grid, np
         # Set the population for the simulation object
@@ -1623,7 +1641,7 @@ def main():
     # simulation.exportData("end.xml")
     # If visualisation is enabled, end the visualisation
     if USE_VISUALISATION:
-        visualisation.join()
+        visualisation.join() #type: ignore
 
 
 if __name__ == "__main__":
