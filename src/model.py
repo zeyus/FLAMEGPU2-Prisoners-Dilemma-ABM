@@ -42,7 +42,7 @@ MAX_AGENT_SPACES: int = 2**16
 INIT_AGENT_COUNT: int = MAX_AGENT_SPACES // 16
 
 # you can set this anywhere between INIT_AGENT_COUNT and MAX_AGENT_COUNT inclusive
-AGENT_HARD_LIMIT: int = MAX_AGENT_SPACES // 2
+AGENT_HARD_LIMIT: int = int(MAX_AGENT_SPACES / 1.5)
 
 # how long to run the sim for
 STEP_COUNT: int = 10000
@@ -187,7 +187,7 @@ AGENT_STRATEGY_IDS: List[int] = [
 # definie color pallete for each agent strategy, with fallback to white
 AGENT_COLOR_SCHEME: pyflamegpu.uDiscreteColor = pyflamegpu.uDiscreteColor(
     "agent_color", pyflamegpu.SET1, pyflamegpu.WHITE)
-AGENT_DEFAULT_SHAPE: str = './src/resources/models/primitive_pyramid.obj'
+AGENT_DEFAULT_SHAPE: str = './src/resources/models/primitive_pyramid_arrow.obj'
 AGENT_DEFAULT_SCALE: float = 0.9
 # Roll if we need to rotate the agents 270 degrees
 ROLL_RADS_270: float = 3 * math.pi / 2
