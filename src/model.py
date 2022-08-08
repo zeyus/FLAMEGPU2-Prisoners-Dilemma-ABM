@@ -37,9 +37,9 @@ RANDOM_SEED: int = 69420
 
 # upper agent limit ... please make it a square number for sanity
 # this is essentially the size of the grid
-MAX_AGENT_SPACES: int = 2**16
+MAX_AGENT_SPACES: int = 2**20
 # starting agent limit
-INIT_AGENT_COUNT: int = MAX_AGENT_SPACES // 16
+INIT_AGENT_COUNT: int = MAX_AGENT_SPACES // 32
 
 # you can set this anywhere between INIT_AGENT_COUNT and MAX_AGENT_COUNT inclusive
 AGENT_HARD_LIMIT: int = int(MAX_AGENT_SPACES / 1.5)
@@ -967,8 +967,9 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME}, flamegpu::Messa
       }}
       FLAMEGPU->agent_out.setVariable<unsigned int>("x_a", requested_x);
       FLAMEGPU->agent_out.setVariable<unsigned int>("y_a", requested_y);
-
-      FLAMEGPU->agent_out.setVariable<uint8_t>("agent_trait", FLAMEGPU->getVariable<uint8_t>("agent_trait"));
+      const uint8_t my_trait = FLAMEGPU->getVariable<uint8_t>("agent_trait");
+      FLAMEGPU->agent_out.setVariable<uint8_t>("agent_trait", my_trait);
+      FLAMEGPU->agent_out.setVariable<unsigned int>("agent_color", my_trait);
       const float init_energy_min = FLAMEGPU->environment.getProperty<float>("init_energy_min");
       const float max_energy = FLAMEGPU->environment.getProperty<float>("max_energy");
       float child_energy = 0.0;
