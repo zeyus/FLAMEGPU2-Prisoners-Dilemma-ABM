@@ -37,7 +37,7 @@ RANDOM_SEED: int = 69420
 
 # upper agent limit ... please make it a square number for sanity
 # this is essentially the size of the grid
-MAX_AGENT_SPACES: int = 2**20
+MAX_AGENT_SPACES: int = 2**16
 # starting agent limit
 INIT_AGENT_COUNT: int = MAX_AGENT_SPACES // 32
 
@@ -66,7 +66,7 @@ PAUSE_AT_START: bool = True
 MAX_PLAY_DISTANCE: int = 1
 
 # Energy cost per step
-COST_OF_LIVING: float = 2
+COST_OF_LIVING: float = 1.0
 
 # Reproduce if energy is above this threshold
 REPRODUCE_MIN_ENERGY: float = 100.0
@@ -88,14 +88,6 @@ PAYOFF_DC: float = 5.0
 PAYOFF_CD: float = -1.0
 # Payoff for defecting against a defector
 PAYOFF_DD: float = 0.0
-# Upper energy limit (do we need this?)
-MAX_ENERGY: float = 150.0
-# How much energy an agent can start with (max)
-INIT_ENERGY_MU: float = 50.0
-INIT_ENERGY_SIGMA: float = 10.0
-INIT_ENERGY_MIN: float = 5.0
-# Noise will invert the agent's decision
-ENV_NOISE: float = 0.1
 
 # How agents move
 AGENT_TRAVEL_STRATEGIES: List[str] = ["random"]
@@ -103,6 +95,19 @@ AGENT_TRAVEL_STRATEGY: int = AGENT_TRAVEL_STRATEGIES.index("random")
 
 # Cost of movement / migration
 AGENT_TRAVEL_COST: float = 1.0
+
+# Upper energy limit (do we need this?)
+MAX_ENERGY: float = 150.0
+# How much energy an agent can start with (max)
+INIT_ENERGY_MU: float = 50.0
+INIT_ENERGY_SIGMA: float = 10.0
+# of cours this can be a specific value
+# but this allows for 5 moves before death.
+INIT_ENERGY_MIN: float = min(5.0 * COST_OF_LIVING + 5.0 * AGENT_TRAVEL_COST, MAX_ENERGY - 1.0)
+# Noise will invert the agent's decision
+ENV_NOISE: float = 0.1
+
+
 
 # Agent status
 AGENT_STATUS_READY: int = 1
@@ -189,8 +194,19 @@ AGENT_COLOR_SCHEME: pyflamegpu.uDiscreteColor = pyflamegpu.uDiscreteColor(
     "agent_color", pyflamegpu.SET1, pyflamegpu.WHITE)
 AGENT_DEFAULT_SHAPE: str = './src/resources/models/primitive_pyramid_arrow.obj'
 AGENT_DEFAULT_SCALE: float = 0.9
-# Roll if we need to rotate the agents 270 degrees
-ROLL_RADS_270: float = 3 * math.pi / 2
+
+ROLL_INCREMENT: float = math.pi / 4
+# RAD ANGLES
+ROLL_RADS: List[float] = [
+  -1 * ROLL_INCREMENT,
+  -2 * ROLL_INCREMENT,
+  -3 * ROLL_INCREMENT,
+  0,
+  4 * ROLL_INCREMENT, # i know :P
+  1 * ROLL_INCREMENT,
+  2 * ROLL_INCREMENT,
+  3 * ROLL_INCREMENT,
+]
 
 # get max number of surrounding agents within this radius
 # use these as constanst for the CUDA functions
@@ -202,6 +218,23 @@ SPACES_WITHIN_RADIUS: int = SPACES_WITHIN_RADIUS_INCL - 1
 SPACES_WITHIN_RADIUS_ZERO_INDEXED: int = SPACES_WITHIN_RADIUS - 1
 CENTER_SPACE: int = SPACES_WITHIN_RADIUS // 2
 
+# if we use visualisation, update agent position and direction.
+CUDA_AGENT_MOVE_UPDATE_VIZ: str = "true" if USE_VISUALISATION else "false"
+CUDA_SEQ_TO_ANGLE_FUNCTION_NAME: str = "seq_to_angle"
+CUDA_SEQ_TO_ANGLE_FUNCTION: str = rf"""
+#ifndef SEQ_TO_ANGLE_
+#define SEQ_TO_ANGLE_
+// @TODO: @NOTE: this does not work with spaces_within_radius != 8 at the moment.
+FLAMEGPU_HOST_DEVICE_FUNCTION float {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(const unsigned int seq) {{
+    static const float seq_map[{SPACES_WITHIN_RADIUS}] = {{
+        {ROLL_RADS[0]}, {ROLL_RADS[1]}, {ROLL_RADS[2]}, {ROLL_RADS[3]},
+        {ROLL_RADS[4]}, {ROLL_RADS[5]}, {ROLL_RADS[6]}, {ROLL_RADS[7]}
+    }};
+
+    return seq_map[seq % {SPACES_WITHIN_RADIUS}];
+}}
+#endif
+"""
 # general function that returns the new position based on the index/sequence of a wrapped moore neighborhood iterator.
 CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME: str = "pos_from_moore_seq"
 CUDA_POS_FROM_MOORE_SEQ_FUNCTION: str = rf"""
@@ -290,7 +323,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_GAME_LIST_FUNC_NAME}, flamegpu::MessageBucket, fla
         neighbour_roll = 0.0;
         neighbour_id = flamegpu::ID_NOT_SET;
         my_action = -1;
-        // we can safely assume one message per bucket, because agents
+        // we can safely?? assume one message per bucket, because agents
         // only output a message at their current location.
         for (const auto& message : FLAMEGPU->message_in(neighbour_bucket)) {{
             neighbour_id = message.getVariable<flamegpu::id_t>("id");
@@ -344,7 +377,7 @@ CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME: str = "play_challenge"
 CUDA_AGENT_PLAY_CHALLENGE_FUNC: str = rf"""
 {CUDA_POS_FROM_MOORE_SEQ_FUNCTION}
 {CUDA_POS_TO_BUCKET_ID_FUNCTION}
-
+{CUDA_SEQ_TO_ANGLE_FUNCTION}
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::MessageNone, flamegpu::MessageBucket) {{
     FLAMEGPU->setVariable<uint8_t>("round_resolved", 0);
     const unsigned int env_max = FLAMEGPU->environment.getProperty<unsigned int>("env_max");
@@ -362,6 +395,9 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
     // if it's 1, I challenge, if it's 0, I respond
     if (!my_challenge && !my_response) {{
         FLAMEGPU->setVariable<uint8_t>("round_resolved", 1);
+        if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
+          FLAMEGPU->setVariable<float>("pitch", {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(challenge_sequence));
+        }}
         FLAMEGPU->setVariable<uint8_t>("challenge_sequence", ++challenge_sequence);
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_CHALLENGE});
         // just send the communication to a bucket that wont be read
@@ -410,6 +446,8 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
 
     }}
 
+    FLAMEGPU->setVariable<uint8_t>("challenge_sequence", ++challenge_sequence);
+
     if (my_response) {{
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY_TO_RESPOND});
     }} else {{
@@ -428,7 +466,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
         }}
     }}
 
-    FLAMEGPU->setVariable<uint8_t>("challenge_sequence", ++challenge_sequence);
+    
       
     
     
@@ -445,6 +483,7 @@ FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_AGENT_PLAY_RESPONSE_CONDITION_NAME}) {{
 """
 CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME: str = "play_response"
 CUDA_AGENT_PLAY_RESPONSE_FUNC: str = rf"""
+{CUDA_SEQ_TO_ANGLE_FUNCTION}
 // if we get here, we're kind of pretty sure we have to respond.
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageBucket, flamegpu::MessageBucket) {{
     const flamegpu::id_t my_id = FLAMEGPU->getID();
@@ -455,7 +494,12 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
     for (const auto& message : FLAMEGPU->message_in(my_bucket)) {{
         const flamegpu::id_t responder_id = message.getVariable<flamegpu::id_t>("responder_id");
         if (responder_id == my_id) {{
+            
             const uint8_t response_sequence = FLAMEGPU->getVariable<uint8_t>("response_sequence");
+
+            if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
+              FLAMEGPU->setVariable<float>("pitch", {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(response_sequence));
+            }}
             const flamegpu::id_t challenger_id = message.getVariable<flamegpu::id_t>("challenger_id");
             
             const uint8_t challenger_trait = message.getVariable<uint8_t>("challenger_trait");
@@ -646,7 +690,7 @@ CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME: str = "move_request"
 CUDA_AGENT_MOVE_REQUEST_FUNCTION: str = rf"""
 {CUDA_POS_FROM_MOORE_SEQ_FUNCTION}
 {CUDA_POS_TO_BUCKET_ID_FUNCTION}
-
+{CUDA_SEQ_TO_ANGLE_FUNCTION}
 // getting here means that there are no neighbours, so, free movement
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME}, flamegpu::MessageNone, flamegpu::MessageBucket) {{
     const unsigned int env_max = FLAMEGPU->environment.getProperty<unsigned int>("env_max");
@@ -677,6 +721,9 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME}, flamegpu::Messa
     }}
     // get a new x,y location for the agent based on the move index.
     {CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME}(my_x, my_y, last_move_attempt, env_max, new_x, new_y);
+    if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
+      FLAMEGPU->setVariable<float>("pitch", {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(last_move_attempt));
+    }}
     ++last_move_attempt;
     // round and round we go
     last_move_attempt %= {SPACES_WITHIN_RADIUS};
@@ -698,7 +745,6 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME}, flamegpu::Messa
 }}
 """
 
-CUDA_AGENT_MOVE_UPDATE_VIZ: str = "true" if USE_VISUALISATION else "false"
 CUDA_AGENT_MOVE_RESPONSE_CONDITION_NAME: str = "move_response_condition"
 CUDA_AGENT_MOVE_RESPONSE_CONDITION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_AGENT_MOVE_RESPONSE_CONDITION_NAME}) {{
@@ -757,6 +803,8 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_RESPONSE_FUNCTION_NAME}, flamegpu::Mess
       FLAMEGPU->setVariable<float>("x", (float) requested_x);
       FLAMEGPU->setVariable<float>("y", (float) requested_y);
     }}
+    // update message bucket to new grid space
+    FLAMEGPU->setVariable<unsigned int>("my_bucket", request_bucket);
     FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY});
 
     return flamegpu::ALIVE;
@@ -776,9 +824,6 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_NEIGHBOURHOOD_BROADCAST_FUNCTION_NAME}, flam
 CUDA_AGENT_NEIGHBOURHOOD_UPDATE_CONDITION_NAME: str = "neighbourhood_update_condition"
 CUDA_AGENT_NEIGHBOURHOOD_UPDATE_CONDITION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_AGENT_NEIGHBOURHOOD_UPDATE_CONDITION_NAME}) {{
-    // initially this function was only for dealing with birth, but now we need it for movement as well 
-    // so before AND after movement, po...wait
-    //return true;
     const float reproduce_min_energy = FLAMEGPU->environment.getProperty<float>("reproduce_min_energy");
     return FLAMEGPU->getVariable<float>("energy") >= reproduce_min_energy;
 }}
@@ -842,6 +887,7 @@ CUDA_AGENT_GOD_GO_FORTH_FUNCTION_NAME: str = "god_go_forth"
 CUDA_AGENT_GOD_GO_FORTH_FUNCTION: str = rf"""
 {CUDA_POS_FROM_MOORE_SEQ_FUNCTION}
 {CUDA_POS_TO_BUCKET_ID_FUNCTION}
+{CUDA_SEQ_TO_ANGLE_FUNCTION}
 
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_GO_FORTH_FUNCTION_NAME}, flamegpu::MessageNone, flamegpu::MessageBucket) {{
 
@@ -900,7 +946,9 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_GO_FORTH_FUNCTION_NAME}, flamegpu::Messa
     FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_ATTEMPTING_REPRODUCTION});
 
     FLAMEGPU->setVariable<unsigned int>("last_reproduction_attempt", last_reproduction_attempt);
-
+    if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
+      FLAMEGPU->setVariable<float>("pitch", {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(last_reproduction_attempt - 1));
+    }}
     const unsigned int request_bucket = {CUDA_POS_TO_BUCKET_ID_FUNCTION_NAME}(new_x, new_y, env_max);
     FLAMEGPU->message_out.setKey(request_bucket);
     FLAMEGPU->message_out.setVariable<flamegpu::id_t>("id", my_id);
@@ -993,6 +1041,8 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME}, flamegpu::Messa
         child_energy = max_energy;
       }}
       FLAMEGPU->agent_out.setVariable<float>("energy", child_energy);
+      // update message bucket to new agent's grid space
+      FLAMEGPU->agent_out.setVariable<unsigned int>("my_bucket", request_bucket);
 
       for (int i = 0; i < {AGENT_TRAIT_COUNT}; i++) {{
         FLAMEGPU->agent_out.setVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i, FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i));
@@ -1184,6 +1234,7 @@ def make_core_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescr
     if USE_VISUALISATION:
         agent.newVariableFloat("x")
         agent.newVariableFloat("y")
+        agent.newVariableFloat("pitch")
 
     return agent
 
@@ -1560,6 +1611,7 @@ def main():
         vis_agent.setModel(AGENT_DEFAULT_SHAPE)
         vis_agent.setModelScale(AGENT_DEFAULT_SCALE)
         vis_agent.setColor(AGENT_COLOR_SCHEME)
+        vis_agent.setPitchVariable("pitch")
 
         # Activate the visualisation.
         visualisation.activate()
@@ -1604,6 +1656,8 @@ def main():
             if USE_VISUALISATION:
                 instance.setVariableFloat("x", float(x))
                 instance.setVariableFloat("y", float(y))
+                instance.setVariableFloat("pitch", 0.0)
+                
             energy = max(random.normalvariate(INIT_ENERGY_MU,
                          INIT_ENERGY_SIGMA), INIT_ENERGY_MIN)
             if MAX_ENERGY > 0.0:
