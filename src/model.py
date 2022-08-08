@@ -248,22 +248,34 @@ FLAMEGPU_HOST_DEVICE_FUNCTION void {CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME}(const
     // uniform int represents the direction to move,
     // e.g. for radius 1, 0 = northwest, 1 = west, 2 = southwest, 3 = north
     // (4 = no movement), 5 = south, 6 = northeast, 7 = east, 8 = southeast
-    unsigned int index = sequence_index;
-    if (index >= {CENTER_SPACE}) {{
-      ++index;
-    }} else if (index > {SPACES_WITHIN_RADIUS_INCL}) {{
-      // wrap around the space, e.g. with radius 1, if index is 10, then index = 1.
-      index = index % {SPACES_WITHIN_RADIUS_INCL};
-    }}
+    const int8_t x_offset[{SPACES_WITHIN_RADIUS}] = {{
+      -1,-1,-1, 0, 0, 1, 1, 1
+    }};
+    const int8_t y_offset[{SPACES_WITHIN_RADIUS}] = {{
+      -1, 0, 1,-1, 1,-1, 0, 1
+    }};
+
+    const int8_t new_x_offset = x_offset[sequence_index];
+    const int8_t new_y_offset = y_offset[sequence_index];
+    new_x = (x + new_x_offset) % env_max;
+    new_y = (y + new_y_offset) % env_max;
+
+    //unsigned int index = sequence_index;
+    //if (index >= {CENTER_SPACE}) {{
+    //  ++index;
+    //}} else if (index > {SPACES_WITHIN_RADIUS_INCL}) {{
+    //  // wrap around the space, e.g. with radius 1, if index is 10, then index = 1.
+    //  index = index % {SPACES_WITHIN_RADIUS_INCL};
+    //}}
     // Convert to x,y offsets
-    const int new_x_offset = index / {SEARCH_GRID_SIZE} - {SEARCH_GRID_OFFSET};
-    const int new_y_offset = index % {SEARCH_GRID_SIZE} - {SEARCH_GRID_OFFSET};
+    //const int new_x_offset = index / {SEARCH_GRID_SIZE} - {SEARCH_GRID_OFFSET};
+    //const int new_y_offset = index % {SEARCH_GRID_SIZE} - {SEARCH_GRID_OFFSET};
     // const int new_x_offset = index % {SEARCH_GRID_SIZE} - {SEARCH_GRID_OFFSET};
     // const int new_y_offset = index / {SEARCH_GRID_SIZE} - {SEARCH_GRID_OFFSET};
 
     // set location to new x,y and wrap around env boundaries
-    new_x = (x + new_x_offset) % env_max;
-    new_y = (y + new_y_offset) % env_max;
+    // new_x = (x + new_x_offset) % env_max;
+    // new_y = (y + new_y_offset) % env_max;
 }}
 #endif
 """
@@ -288,7 +300,6 @@ CUDA_SEARCH_FUNC_NAME: str = "search_for_neighbours"
 CUDA_SEARCH_FUNC: str = rf"""
 {CUDA_POS_TO_BUCKET_ID_FUNCTION}
 FLAMEGPU_AGENT_FUNCTION({CUDA_SEARCH_FUNC_NAME}, flamegpu::MessageNone, flamegpu::MessageBucket) {{
-    {debug_set_color()}
     const unsigned int my_x = FLAMEGPU->getVariable<unsigned int>("x_a");
     const unsigned int my_y = FLAMEGPU->getVariable<unsigned int>("y_a");
     const unsigned int env_max = FLAMEGPU->environment.getProperty<unsigned int>("env_max");
@@ -394,7 +405,6 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
 
     uint8_t challenge_sequence = FLAMEGPU->getVariable<uint8_t>("challenge_sequence");
     const uint8_t response_sequence = {SPACES_WITHIN_RADIUS} - challenge_sequence - 1;
-    {debug_set_color()}
     FLAMEGPU->setVariable<uint8_t>("response_sequence", response_sequence);
 
     const int8_t my_challenge_action = FLAMEGPU->getVariable<int8_t, {SPACES_WITHIN_RADIUS}>("my_actions", challenge_sequence);
@@ -641,13 +651,11 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
             // that means that the agent(s) we were to play against have
             // died and we can instead do a movement action this turn.
             // FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_MOVEMENT_UNRESOLVED});
-            {debug_set_color(1)}
             FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY});
 
             // also nothing to resolve
             FLAMEGPU->setVariable<uint8_t>("round_resolved", 1);
         }} else {{
-            {debug_set_color(2)}
             FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY});
         }}
     }}
@@ -668,7 +676,7 @@ CUDA_AGENT_PLAY_RESOLVE_FUNC_NAME: str = "play_resolve"
 CUDA_AGENT_PLAY_RESOLVE_FUNC: str = rf"""
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESOLVE_FUNC_NAME}, flamegpu::MessageBucket, flamegpu::MessageNone) {{
     const flamegpu::id_t my_id = FLAMEGPU->getID();
-    {debug_set_color()}
+    
     const unsigned int my_bucket = FLAMEGPU->getVariable<unsigned int>("my_bucket");
 
     for (const auto& message : FLAMEGPU->message_in(my_bucket)) {{
@@ -709,10 +717,8 @@ CUDA_AGENT_MOVE_REQUEST_FUNCTION: str = rf"""
 {CUDA_SEQ_TO_ANGLE_FUNCTION}
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME}, flamegpu::MessageNone, flamegpu::MessageBucket) {{
     unsigned int last_move_attempt = FLAMEGPU->getVariable<unsigned int>("last_move_attempt");
-    {debug_set_color()}
 
     // try to limit the need for calling random.
-    // @TODO: FIX HACK, though this should only happen once, last move attempt is initialised
     // with spaces_within_radius + 1.
     if (last_move_attempt > {SPACES_WITHIN_RADIUS}) {{
         float my_energy = FLAMEGPU->getVariable<float>("energy");
@@ -743,27 +749,28 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME}, flamegpu::Messa
 
     bool space_is_free = false;
 
-    for (unsigned int i = 0; i < {SPACES_WITHIN_RADIUS}; i++) {{
+    for (unsigned int i = 0; i < {SPACES_WITHIN_RADIUS}; ++i) {{
       if (move_sequence >= {SPACES_WITHIN_RADIUS}) {{
           break;
       }}
       last_move_attempt = (last_move_attempt + i) % {SPACES_WITHIN_RADIUS};
       space_is_free = (FLAMEGPU->getVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("neighbour_list", last_move_attempt) == flamegpu::ID_NOT_SET);
       ++move_sequence;
-      if(!space_is_free) {{
-        continue;
+      if(space_is_free) {{
+        // get the new x,y location.
+        {CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME}(my_x, my_y, last_move_attempt, env_max, new_x, new_y);
+        break;
       }}
-      {CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME}(my_x, my_y, last_move_attempt, env_max, new_x, new_y);
-      last_move_attempt = (last_move_attempt + 1) % {SPACES_WITHIN_RADIUS};
-      break;
     }}
 
     // check if we found a free space
     if (new_x > env_max || new_y > env_max) {{
+        FLAMEGPU->message_out.setKey(FLAMEGPU->environment.getProperty<unsigned int>("trash_bin"));
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY});
         return flamegpu::ALIVE;
     }}
 
+    last_move_attempt = (last_move_attempt + 1) % {SPACES_WITHIN_RADIUS};
     FLAMEGPU->setVariable<unsigned int>("move_sequence", move_sequence);
 
     // we have a free space so attempt to move there
@@ -805,9 +812,8 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_RESPONSE_FUNCTION_NAME}, flamegpu::Mess
     const unsigned int env_max = FLAMEGPU->environment.getProperty<unsigned int>("env_max");
     const unsigned int my_x = FLAMEGPU->getVariable<unsigned int>("x_a");
     const unsigned int my_y = FLAMEGPU->getVariable<unsigned int>("y_a");
-
     const flamegpu::id_t my_id = FLAMEGPU->getID();
-    const float my_roll = FLAMEGPU->getVariable<float>("die_roll");
+
     const unsigned int request_bucket = FLAMEGPU->getVariable<unsigned int>("request_bucket");
 
     flamegpu::id_t requester_id;
@@ -815,27 +821,32 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_RESPONSE_FUNCTION_NAME}, flamegpu::Mess
     
     unsigned int requested_x;
     unsigned int requested_y;
+    unsigned int wrap_x;
+    unsigned int wrap_y;
     unsigned int neighbour_bucket;
 
     flamegpu::id_t highest_roller_id = flamegpu::ID_NOT_SET;
     float highest_roll = 0.0;
 
-    const unsigned int last_move_attempt = (FLAMEGPU->getVariable<unsigned int>("last_move_attempt") - 1) % {SPACES_WITHIN_RADIUS};
     // we MUST loop around to keep track of all claimed spaces
     for (unsigned int i = 0; i < {SPACES_WITHIN_RADIUS}; ++i) {{
-      {CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME}(my_x, my_y, i, env_max, requested_x, requested_y);
-      neighbour_bucket = {CUDA_POS_TO_BUCKET_ID_FUNCTION_NAME}(requested_x, requested_y, env_max);
-      requester_id = flamegpu::ID_NOT_SET;
+      {CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME}(my_x, my_y, i, env_max, wrap_x, wrap_y);
+      neighbour_bucket = {CUDA_POS_TO_BUCKET_ID_FUNCTION_NAME}(wrap_x, wrap_y, env_max);
 
+      
+      requester_id = flamegpu::ID_NOT_SET;
+      requester_roll = 0.0;
       for (const auto& message : FLAMEGPU->message_in(neighbour_bucket)) {{
           requester_id = message.getVariable<flamegpu::id_t>("requester_id");
+          
+          if (requester_id != flamegpu::ID_NOT_SET) {{
+              continue;
+          }}
+
           // if it's not where we want to move, then we just update if we have a new neighbour.
           if (neighbour_bucket != request_bucket) {{
-              if (requester_id != flamegpu::ID_NOT_SET) {{
-                  FLAMEGPU->setVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("neighbour_list", i, requester_id);
-                  break;
-              }}
-              continue;
+              FLAMEGPU->setVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("neighbour_list", i, requester_id);
+              break;
           }}
           
           // this is our target space, so let's see if we can claim it
@@ -845,6 +856,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_RESPONSE_FUNCTION_NAME}, flamegpu::Mess
               highest_roller_id = requester_id;
               requested_x = message.getVariable<unsigned int>("requested_x");
               requested_y = message.getVariable<unsigned int>("requested_y");
+              FLAMEGPU->setVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("neighbour_list", i, requester_id);
           }}
           // otherwise the die roll is lower and they have no claim.
       }}
@@ -858,7 +870,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_RESPONSE_FUNCTION_NAME}, flamegpu::Mess
     // set location to new x, y
     FLAMEGPU->setVariable<unsigned int>("x_a", requested_x);
     FLAMEGPU->setVariable<unsigned int>("y_a", requested_y);
-    {debug_set_color(4)}
+
     // also update visualisation float values if required
     if({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
       FLAMEGPU->setVariable<float>("x", (float) requested_x);
@@ -872,17 +884,19 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_RESPONSE_FUNCTION_NAME}, flamegpu::Mess
 }}
 """
 
+# everyone broadcasts
 CUDA_AGENT_NEIGHBOURHOOD_BROADCAST_FUNCTION_NAME: str = "neighbourhood_broadcast"
 CUDA_AGENT_NEIGHBOURHOOD_BROADCAST_FUNCTION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_NEIGHBOURHOOD_BROADCAST_FUNCTION_NAME}, flamegpu::MessageNone, flamegpu::MessageBucket) {{
     // we could be smart here and iterate the neighbour list and only check the existing neighbours,
     // because none spawn, but movement could affect this...so for now just check all.
-    {debug_set_color()}
     FLAMEGPU->message_out.setVariable<flamegpu::id_t>("id", FLAMEGPU->getID());
     FLAMEGPU->message_out.setKey(FLAMEGPU->getVariable<unsigned int>("my_bucket"));
     return flamegpu::ALIVE;
 }}
 """
+
+# only agents that can reproduce care about their neibours now 
 CUDA_AGENT_NEIGHBOURHOOD_UPDATE_CONDITION_NAME: str = "neighbourhood_update_condition"
 CUDA_AGENT_NEIGHBOURHOOD_UPDATE_CONDITION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_AGENT_NEIGHBOURHOOD_UPDATE_CONDITION_NAME}) {{
@@ -900,37 +914,44 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_NEIGHBOURHOOD_UPDATE_FUNCTION_NAME}, flamegp
     const unsigned int my_y = FLAMEGPU->getVariable<unsigned int>("y_a");
     const unsigned int my_id = FLAMEGPU->getID();
     const unsigned int env_max = FLAMEGPU->environment.getProperty<unsigned int>("env_max");
-    {debug_set_color()}
+    
     // iterate over all cells in the neighbourhood
     // this also wraps across env boundaries.
     unsigned int num_neighbours = 0;
-    unsigned int neighbour_x = my_x;
-    unsigned int neighbour_y = my_y;
+    unsigned int neighbour_x;
+    unsigned int neighbour_y;
     flamegpu::id_t neighbour_id;
+    unsigned int neighbour_bucket;
+
     for (unsigned int i = 0; i < {SPACES_WITHIN_RADIUS}; ++i) {{
         {CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME}(my_x, my_y, i, env_max, neighbour_x, neighbour_y);
-        const unsigned int neighbour_bucket = {CUDA_POS_TO_BUCKET_ID_FUNCTION_NAME}(neighbour_x, neighbour_y, env_max);
+        neighbour_bucket = {CUDA_POS_TO_BUCKET_ID_FUNCTION_NAME}(neighbour_x, neighbour_y, env_max);
         // reset neighbour info.
         neighbour_id = flamegpu::ID_NOT_SET;
-        // we can safely assume one message per bucket, because agents
-        // only output a message at their current location.
+        
+        // if there's a message, then we have a neighbour.
         for (const auto& message : FLAMEGPU->message_in(neighbour_bucket)) {{
+            
+            // but we only know for sure, if the neighbour has an ID
             neighbour_id = message.getVariable<flamegpu::id_t>("id");
-            if (neighbour_id == flamegpu::ID_NOT_SET) {{
+            // if the neighbour has an ID, then the space is occupied
+            if (neighbour_id != flamegpu::ID_NOT_SET) {{
+              ++num_neighbours;
               break;
             }}
-            ++num_neighbours;
-            break;
         }}
-        // if no message was found, it will default to ID_NOT_SET
+
+        // if no message was found, it will default to ID_NOT_SET, otherwise the ID from the message
         FLAMEGPU->setVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("neighbour_list", i, neighbour_id);
     }}
 
+    // if there is at least one space available, then we can reproduce.
     if (num_neighbours < {SPACES_WITHIN_RADIUS}) {{
+        {debug_set_color(0)}
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_ATTEMPTING_REPRODUCTION});
         return flamegpu::ALIVE;
     }}
-    
+    {debug_set_color(1)}
     FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_REPRODUCTION_IMPOSSIBLE});
     return flamegpu::ALIVE;
 }}
@@ -939,9 +960,8 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_NEIGHBOURHOOD_UPDATE_FUNCTION_NAME}, flamegp
 CUDA_AGENT_GOD_GO_FORTH_CONDITION_NAME: str = "god_go_forth_condition"
 CUDA_AGENT_GOD_GO_FORTH_CONDITION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_AGENT_GOD_GO_FORTH_CONDITION_NAME}) {{
-    const unsigned int agent_count = FLAMEGPU->environment.getProperty<unsigned int>("agent_count");
-    const unsigned int max_agents = FLAMEGPU->environment.getProperty<unsigned int>("max_agents");
-    return agent_count < max_agents && FLAMEGPU->getVariable<unsigned int>("agent_status") == {AGENT_STATUS_ATTEMPTING_REPRODUCTION};
+    const uint8_t overpopuated = FLAMEGPU->environment.getProperty<uint8_t>("overpopulated");
+    return overpopuated < 1 && FLAMEGPU->getVariable<unsigned int>("agent_status") == {AGENT_STATUS_ATTEMPTING_REPRODUCTION};
 }}
 """
 
@@ -956,7 +976,6 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_GO_FORTH_FUNCTION_NAME}, flamegpu::Messa
 
     const uint8_t max_children_per_step = FLAMEGPU->environment.getProperty<uint8_t>("max_children_per_step");
     const uint8_t agents_spawned = FLAMEGPU->getVariable<uint8_t>("agents_spawned");
-    {debug_set_color()}
 
     // if we have already spawned enough children, we can't go forth.
     if (agents_spawned >= max_children_per_step) {{
@@ -971,7 +990,13 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_GO_FORTH_FUNCTION_NAME}, flamegpu::Messa
     const unsigned int my_id = FLAMEGPU->getID();
     
     unsigned int reproduce_sequence = FLAMEGPU->getVariable<unsigned int>("reproduce_sequence");
-    
+
+    if (reproduce_sequence >= {SPACES_WITHIN_RADIUS}) {{
+        FLAMEGPU->message_out.setKey(FLAMEGPU->environment.getProperty<unsigned int>("trash_bin"));
+        FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_REPRODUCTION_IMPOSSIBLE});
+        return flamegpu::ALIVE;
+    }}
+
     unsigned int last_reproduction_attempt = FLAMEGPU->getVariable<unsigned int>("last_reproduction_attempt");
     // try to limit the need for calling random.
     if (last_reproduction_attempt > {SPACES_WITHIN_RADIUS}) {{
@@ -984,29 +1009,29 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_GO_FORTH_FUNCTION_NAME}, flamegpu::Messa
     unsigned int new_y = env_max + 1;
 
     bool space_is_free = false;
-    for (unsigned int i = 0; i < {SPACES_WITHIN_RADIUS}; i++) {{
+
+    for (unsigned int i = 0; i < {SPACES_WITHIN_RADIUS}; ++i) {{
       if (reproduce_sequence >= {SPACES_WITHIN_RADIUS}) {{
           break;
       }}
       last_reproduction_attempt = (last_reproduction_attempt + i) % {SPACES_WITHIN_RADIUS};
       space_is_free = (FLAMEGPU->getVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("neighbour_list", last_reproduction_attempt) == flamegpu::ID_NOT_SET);
       ++reproduce_sequence;
-      if(!space_is_free) {{
-        continue;
+      if(space_is_free) {{
+        // get the new x,y location.
+        {CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME}(my_x, my_y, last_reproduction_attempt, env_max, new_x, new_y);
+        break;
       }}
-      // get a new x,y location.
-      {CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME}(my_x, my_y, last_reproduction_attempt, env_max, new_x, new_y);
-      last_reproduction_attempt = (last_reproduction_attempt + 1) % {SPACES_WITHIN_RADIUS};
-      
-      break;
     }}
     
     // check if we found a free space
     if (new_x > env_max || new_y > env_max) {{
+        FLAMEGPU->message_out.setKey(FLAMEGPU->environment.getProperty<unsigned int>("trash_bin"));
         FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_REPRODUCTION_IMPOSSIBLE});
         return flamegpu::ALIVE;
     }}
 
+    last_reproduction_attempt = (last_reproduction_attempt + 1) % {SPACES_WITHIN_RADIUS};
     FLAMEGPU->setVariable<unsigned int>("reproduce_sequence", reproduce_sequence);
 
     // we have a free space so attempt to reproduce
@@ -1034,8 +1059,8 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_GO_FORTH_FUNCTION_NAME}, flamegpu::Messa
 CUDA_AGENT_GOD_MULTIPLY_CONDITION_NAME: str = "god_multiply_condition"
 CUDA_AGENT_GOD_MULTIPLY_CONDITION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_AGENT_GOD_MULTIPLY_CONDITION_NAME}) {{
-    
-    return FLAMEGPU->getVariable<unsigned int>("agent_status") == {AGENT_STATUS_ATTEMPTING_REPRODUCTION};
+    const uint8_t overpopuated = FLAMEGPU->environment.getProperty<uint8_t>("overpopulated");
+    return overpopuated < 1 && FLAMEGPU->getVariable<unsigned int>("agent_status") == {AGENT_STATUS_ATTEMPTING_REPRODUCTION};
 }}
 """
 CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME: str = "god_multiply"
@@ -1048,31 +1073,39 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME}, flamegpu::Messa
     const unsigned int my_y = FLAMEGPU->getVariable<unsigned int>("y_a");
     const unsigned int my_id = FLAMEGPU->getID();
 
+    const unsigned int request_bucket = FLAMEGPU->getVariable<unsigned int>("request_bucket");
+
     flamegpu::id_t requester_id;
-    // first resolve the message where I want to reproduce
-    unsigned int requested_x;
-    unsigned int requested_y;
-    unsigned int neighbour_bucket;
     float requester_roll;
 
-    const unsigned int request_bucket = FLAMEGPU->getVariable<unsigned int>("request_bucket");
+    unsigned int requested_x;
+    unsigned int requested_y;
+    unsigned int wrap_x;
+    unsigned int wrap_y;
+    unsigned int neighbour_bucket;
+    
     flamegpu::id_t highest_roller_id = flamegpu::ID_NOT_SET;
     float highest_roll = 0.0;
     
-
     // we MUST loop around to keep track of all claimed spaces
     for (unsigned int i = 0; i < {SPACES_WITHIN_RADIUS}; ++i) {{
-      {CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME}(my_x, my_y, i, env_max, requested_x, requested_y);
-      neighbour_bucket = {CUDA_POS_TO_BUCKET_ID_FUNCTION_NAME}(requested_x, requested_y, env_max);
+      {CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME}(my_x, my_y, i, env_max, wrap_x, wrap_y);
+      neighbour_bucket = {CUDA_POS_TO_BUCKET_ID_FUNCTION_NAME}(wrap_x, wrap_y, env_max);
 
+      requester_id = flamegpu::ID_NOT_SET;
+      requester_roll = 0.0;
       for (const auto& message : FLAMEGPU->message_in(neighbour_bucket)) {{
           requester_id = message.getVariable<flamegpu::id_t>("id");
-          if (neighbour_bucket != request_bucket) {{
-              if (requester_id != flamegpu::ID_NOT_SET) {{
-                  FLAMEGPU->setVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("neighbour_list", i, requester_id);
-                  break;
-              }}
+
+          if (requester_id == flamegpu::ID_NOT_SET) {{
               continue;
+          }}
+
+          // if it's not where we want to move, then we just update if we have a new neighbour.
+          if (neighbour_bucket != request_bucket) {{
+              // if it is an agent, then we are safe to update the neibour list
+              FLAMEGPU->setVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("neighbour_list", i, requester_id);
+              break;
           }}
 
           // this is our target space, so let's see if we can claim it
@@ -1082,6 +1115,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME}, flamegpu::Messa
               highest_roller_id = requester_id;
               requested_x = message.getVariable<unsigned int>("requested_x");
               requested_y = message.getVariable<unsigned int>("requested_y");
+              FLAMEGPU->setVariable<flamegpu::id_t, {SPACES_WITHIN_RADIUS}>("neighbour_list", i, requester_id);
           }}
           // otherwise the die roll is lower and they have no claim.
       }}
@@ -1099,19 +1133,20 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME}, flamegpu::Messa
     FLAMEGPU->setVariable<float>("energy", my_energy);
     FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_REPRODUCTION_COMPLETE});
 
-    // now spawn a child
+    //set child location
+    FLAMEGPU->agent_out.setVariable<unsigned int>("x_a", requested_x);
+    FLAMEGPU->agent_out.setVariable<unsigned int>("y_a", requested_y);
+
     if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
       FLAMEGPU->agent_out.setVariable<float>("x", (float)requested_x);
       FLAMEGPU->agent_out.setVariable<float>("y", (float)requested_y);
     }}
 
-    FLAMEGPU->agent_out.setVariable<unsigned int>("x_a", requested_x);
-    FLAMEGPU->agent_out.setVariable<unsigned int>("y_a", requested_y);
     const uint8_t my_trait = FLAMEGPU->getVariable<uint8_t>("agent_trait");
     FLAMEGPU->agent_out.setVariable<uint8_t>("agent_trait", my_trait);
-    // FLAMEGPU->agent_out.setVariable<unsigned int>("agent_color", my_trait);
-    {debug_set_color(7)}
+    //FLAMEGPU->agent_out.setVariable<unsigned int>("agent_color", my_trait);
     FLAMEGPU->agent_out.setVariable<unsigned int>("agent_color", 99);
+    
     const float init_energy_min = FLAMEGPU->environment.getProperty<float>("init_energy_min");
     const float max_energy = FLAMEGPU->environment.getProperty<float>("max_energy");
     float child_energy = 0.0;
@@ -1135,12 +1170,13 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME}, flamegpu::Messa
       child_energy = max_energy;
     }}
     FLAMEGPU->agent_out.setVariable<float>("energy", child_energy);
-    // update message bucket to new agent's grid space
+    // update message bucket of the child to new agent's grid space
     FLAMEGPU->agent_out.setVariable<unsigned int>("my_bucket", request_bucket);
 
-    for (int i = 0; i < {AGENT_TRAIT_COUNT}; i++) {{
+    for (int i = 0; i < {AGENT_TRAIT_COUNT}; ++i) {{
       FLAMEGPU->agent_out.setVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i, FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i));
     }}
+
     FLAMEGPU->agent_out.setVariable<unsigned int>("agent_status", {AGENT_STATUS_NEW_AGENT});
     uint8_t agents_spawned = FLAMEGPU->getVariable<uint8_t>("agents_spawned");
     FLAMEGPU->setVariable<uint8_t>("agents_spawned", ++agents_spawned);
@@ -1163,7 +1199,6 @@ CUDA_ENVIRONMENTAL_PUNISHMENT_NAME: str = "environmental_punishment"
 CUDA_ENVIRONMENTAL_PUNISHMENT_FUNCTION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION({CUDA_ENVIRONMENTAL_PUNISHMENT_NAME}, flamegpu::MessageNone, flamegpu::MessageNone) {{
     // begin the cull
-    {debug_set_color()}
     const unsigned int max_agents = FLAMEGPU->environment.getProperty<unsigned int>("max_agents");
     if (FLAMEGPU->getThreadIndex() >= max_agents) {{
         return flamegpu::DEAD;
@@ -1201,6 +1236,13 @@ def _print_prisoner_states(prisoner: pyflamegpu.HostAgentAPI) -> None:
     print(f"n_ready: {n_ready}, n_ready_to_challenge: {n_ready_to_challenge}, n_ready_to_respond: {n_ready_to_respond} n_play_completed: {n_play_completed}, n_moving: {n_moving}, n_move_unresolved: {n_move_unresolved}, n_move_completed: {n_move_completed}")
 
 
+def _update_agent_count(FLAMEGPU, prisoner: pyflamegpu.HostAgentAPI) -> int:
+    agent_count = prisoner.count()
+    overpopulated = 1 if agent_count > AGENT_HARD_LIMIT else 0
+    FLAMEGPU.environment.setPropertyUInt("agent_count", agent_count)
+    FLAMEGPU.environment.setPropertyUInt8("overpopulated", overpopulated)
+    return overpopulated
+
 class step_fn(pyflamegpu.HostFunctionCallback):
     def __init__(self):
         super().__init__()
@@ -1232,18 +1274,17 @@ class exit_play_fn(pyflamegpu.HostFunctionConditionCallback):
     def run(self, FLAMEGPU: pyflamegpu.HostAPI):
         # print("play")
         self.iterations += 1
+        prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
         if self.iterations < self.max_iterations:
-            prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
             if VERBOSE_OUTPUT:
                 if FLAMEGPU.getStepCounter() % OUTPUT_EVERY_N_STEPS == 0:
                     print("ready: ", prisoner.countUInt("agent_status", AGENT_STATUS_READY),
                           "ready_respond: ", prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_RESPOND))
-            if prisoner.count() > AGENT_HARD_LIMIT:
-                return pyflamegpu.EXIT
             #print(prisoner.countUInt("agent_status", AGENT_STATUS_SKIP_RESPONSE))
             if prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_CHALLENGE) or prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_RESPOND):
                 return pyflamegpu.CONTINUE
         self.iterations = 0
+        _update_agent_count(FLAMEGPU, prisoner)
         return pyflamegpu.EXIT
 
 
@@ -1257,12 +1298,12 @@ class exit_move_fn(pyflamegpu.HostFunctionConditionCallback):
     def run(self, FLAMEGPU: pyflamegpu.HostAPI):
         # print("move")
         self.iterations += 1
+        prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
         if self.iterations < self.max_iterations:
             # Agent movements still unresolved
-            prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
             if prisoner.countUInt("agent_status", AGENT_STATUS_MOVEMENT_UNRESOLVED):
                 return pyflamegpu.CONTINUE
-
+        _update_agent_count(FLAMEGPU, prisoner)
         self.iterations = 0
         return pyflamegpu.EXIT
 
@@ -1280,8 +1321,7 @@ class init_god_fn(pyflamegpu.HostFunctionCallback):
         super().__init__()
 
     def run(self, FLAMEGPU: pyflamegpu.HostAPI):
-        prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
-        FLAMEGPU.environment.setPropertyUInt("agent_count", prisoner.count())
+        pass
 
 
 class exit_god_fn(pyflamegpu.HostFunctionConditionCallback):
@@ -1293,12 +1333,12 @@ class exit_god_fn(pyflamegpu.HostFunctionConditionCallback):
 
     def run(self, FLAMEGPU: pyflamegpu.HostAPI):
         prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
-        FLAMEGPU.environment.setPropertyUInt("agent_count", prisoner.count())
+        overpopulated = _update_agent_count(FLAMEGPU, prisoner)
         self.iterations += 1
         if self.iterations < self.max_iterations:
             prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
             # print(prisoner.count())
-            if prisoner.countUInt("agent_status", AGENT_STATUS_ATTEMPTING_REPRODUCTION) and prisoner.count() < AGENT_HARD_LIMIT:
+            if prisoner.countUInt("agent_status", AGENT_STATUS_ATTEMPTING_REPRODUCTION) and overpopulated < 1:
                 return pyflamegpu.CONTINUE
         self.iterations = 0
         return pyflamegpu.EXIT
@@ -1345,6 +1385,7 @@ def add_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
     env.newPropertyUInt("env_max", ENV_MAX, isConst=True)
     env.newPropertyUInt("trash_bin", BUCKET_SIZE, isConst=True)
     env.newPropertyUInt("agent_count", 0)
+    env.newPropertyUInt8("overpopulated", 0)
 
 
 def add_pdgame_vars(agent: pyflamegpu.AgentDescription) -> None:
@@ -1381,7 +1422,6 @@ def add_god_vars(agent: pyflamegpu.AgentDescription) -> None:
     agent.newVariableUInt("last_reproduction_attempt",
                           SPACES_WITHIN_RADIUS_INCL)
     agent.newVariableUInt("reproduce_sequence", 0)
-    #agent.newVariableUInt8("newborn", 0)
     agent.newVariableUInt8("agents_spawned", 0)
 
 
@@ -1765,7 +1805,7 @@ def main():
             agent_trait: int = random.choice(AGENT_TRAITS)
             instance.setVariableUInt8("agent_trait", agent_trait)
             # this could be based on strategy, or change during runtime!
-            instance.setVariableUInt("agent_color", agent_trait)
+            # instance.setVariableUInt("agent_color", agent_trait)
             instance.setVariableUInt("agent_color", 99)
             # select agent strategy
             if AGENT_STRATEGY_PER_TRAIT:
