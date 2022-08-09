@@ -1,10 +1,10 @@
 ###
 # pyflamegpu Prisoner's Dilemma Agent Based Model
 # @author: @zeyus and @EwBew
-# @date: 2020-08-07
-# @version: v0.0.1
+# @date: 2020-08-09
+# @version: v0.0.3
 ###
-__VERSION__ = "v0.0.1"
+__VERSION__ = "v0.0.3"
 __VERSION_STR__ = f"{__name__} v{__VERSION__}"
 # @TODO: update
 # Order of execution is as follows: (outdated...)
@@ -20,6 +20,8 @@ __VERSION_STR__ = f"{__name__} v{__VERSION__}"
 # @TODO: resolv condition where an agent plays a neighbour and dies
 # but another neighbour has no games to play (they should move).
 
+from distutils.command.config import config
+from time import strftime
 from typing import List
 import pyflamegpu
 # Import standard python libs that are used
@@ -33,31 +35,32 @@ import math
 ##########################################
 
 # Define some constants
-RANDOM_SEED: int = 69420
+RANDOM_SEED: int = random.randint(0, 2 ** 32 / 2 - 1)
 
 # upper agent limit ... please make it a square number for sanity
 # this is essentially the size of the grid
-MAX_AGENT_SPACES: int = 2**12
+MAX_AGENT_SPACES: int = 2**18
 # starting agent limit
-INIT_AGENT_COUNT: int = MAX_AGENT_SPACES // 32
+INIT_AGENT_COUNT: int = int(MAX_AGENT_SPACES * 0.16)
 
 # you can set this anywhere between INIT_AGENT_COUNT and MAX_AGENT_COUNT inclusive
 # carrying capacity
-AGENT_HARD_LIMIT: int = int(MAX_AGENT_SPACES * 0.9)
+AGENT_HARD_LIMIT: int = int(MAX_AGENT_SPACES * 0.5)
 
 # how long to run the sim for
-STEP_COUNT: int = 10000
+STEP_COUNT: int = 100
 # TODO: logging / Debugging
-
+WRITE_LOG: bool = True
+LOG_FILE: str = f"data/{strftime('%Y-%m-%d %H-%M-%S')}_{RANDOM_SEED}.json"
 VERBOSE_OUTPUT: bool = False
 DEBUG_OUTPUT: bool = False
-OUTPUT_EVERY_N_STEPS: int = 10
+OUTPUT_EVERY_N_STEPS: int = 1
 
 # rate limit simulation?
 SIMULATION_SPS_LIMIT: int = 0  # 0 = unlimited
 
 # Show agent visualisation
-USE_VISUALISATION: bool = True and pyflamegpu.VISUALISATION
+USE_VISUALISATION: bool = False and pyflamegpu.VISUALISATION
 
 # visualisation camera speed
 VISUALISATION_CAMERA_SPEED: float = 0.1
@@ -65,7 +68,8 @@ VISUALISATION_CAMERA_SPEED: float = 0.1
 PAUSE_AT_START: bool = True
 VISUALISATION_BG_RGB: List[float] = [0.1, 0.1, 0.1]
 
-
+# should agents rotate to face the direction of their last action?
+VISUALISATION_ORIENT_AGENTS: bool = False
 # radius of message search grid (broken now from hardcoded x,y offset map)
 MAX_PLAY_DISTANCE: int = 1
 
@@ -98,7 +102,7 @@ AGENT_TRAVEL_STRATEGIES: List[str] = ["random"]
 AGENT_TRAVEL_STRATEGY: int = AGENT_TRAVEL_STRATEGIES.index("random")
 
 # Cost of movement / migration
-AGENT_TRAVEL_COST: float = 0.5
+AGENT_TRAVEL_COST: float = 0.5 * COST_OF_LIVING
 
 # Upper energy limit (do we need this?)
 MAX_ENERGY: float = 150.0
@@ -109,7 +113,7 @@ INIT_ENERGY_SIGMA: float = 10.0
 # but this allows for 5 moves before death.
 INIT_ENERGY_MIN: float = min(5.0 * COST_OF_LIVING + 5.0 * AGENT_TRAVEL_COST, MAX_ENERGY - 1.0)
 # Noise will invert the agent's decision
-ENV_NOISE: float = 0.01
+ENV_NOISE: float = 0.0
 
 # Agent strategies for the PD game
 # "proportion" let's you say how likely agents spawn with a particular strategy
@@ -118,6 +122,7 @@ AGENT_STRATEGY_DEFECT: int = 1
 AGENT_STRATEGY_TIT_FOR_TAT: int = 2
 AGENT_STRATEGY_RANDOM: int = 3
 
+# @TODO: fix if number of strategies is not 4 (logging var...)
 AGENT_STRATEGIES: dict = {
     "always_coop": {
         "name": "always_coop",
@@ -144,15 +149,23 @@ AGENT_STRATEGIES: dict = {
 
 # How many variants of agents are there?, more wil result in more agent colors
 AGENT_TRAIT_COUNT: int = 4
+# @TODO: allow for 1 trait (implies no strategy per trait)
 # AGENT_TRAIT_COUNT: int = 1
 
+# if this is true, agents will just have ONE strategy for all
+# regardless of AGENT_STRATEGY_PER_TRAIT setting.
+AGENT_STRATEGY_PURE: bool = True
 # Should an agent deal differently per variant? (max strategies = number of variants)
 # or, should they have a strategy for same vs different (max strategies = 2)
 AGENT_STRATEGY_PER_TRAIT: bool = False
 
 # Mutation frequency
-AGENT_TRAIT_MUTATION_RATE: float = 0.005
+AGENT_TRAIT_MUTATION_RATE: float = 0.0
 
+
+MULTI_RUN = True
+MULTI_RUN_STEPS = 5000
+MULTI_RUN_COUNT = 10
 
 ##########################################
 # Main script                            #
@@ -160,6 +173,18 @@ AGENT_TRAIT_MUTATION_RATE: float = 0.005
 # You should not need to change anything #
 # below this line                        #
 ##########################################
+
+# set up logging
+def configure_logging(model: pyflamegpu.ModelDescription) -> pyflamegpu.StepLoggingConfig: 
+    step_log_cfg = pyflamegpu.StepLoggingConfig(model)
+    step_log_cfg.setFrequency(OUTPUT_EVERY_N_STEPS)
+    step_log_cfg.agent("prisoner").logCount()
+    step_log_cfg.logEnvironment("population_counts_step")
+    return step_log_cfg
+    #step_log_cfg
+
+
+
 AGENT_RESULT_COOP: int = 0
 AGENT_RESULT_DEFECT: int = 1
 
@@ -185,6 +210,7 @@ ENV_MAX: int = math.ceil(math.sqrt(MAX_AGENT_SPACES))
 # that way we have a spare "trash" bucket for No-comm.
 BUCKET_SIZE: int = ENV_MAX**2
 
+
 # Generate weights based on strategy configuration
 AGENT_WEIGHTS: List[float] = [AGENT_STRATEGIES[strategy]
                               ["proportion"] for strategy in AGENT_STRATEGIES]  # type: ignore
@@ -193,6 +219,8 @@ AGENT_STRATEGY_IDS: List[int] = [
     AGENT_STRATEGIES[strategy]["id"] for strategy in AGENT_STRATEGIES]  # type: ignore
 
 AGENT_STRATEGY_COUNT: int = len(AGENT_STRATEGY_IDS)
+
+POPULATION_COUNT_BINS: int = AGENT_STRATEGY_COUNT ** 2 + AGENT_STRATEGY_COUNT
 # definie color pallete for each agent strategy, with fallback to white
 AGENT_COLOR_SCHEME: pyflamegpu.uDiscreteColor = pyflamegpu.uDiscreteColor(
     "agent_color", pyflamegpu.SET1, pyflamegpu.WHITE)
@@ -224,6 +252,21 @@ CENTER_SPACE: int = SPACES_WITHIN_RADIUS // 2
 
 # if we use visualisation, update agent position and direction.
 CUDA_AGENT_MOVE_UPDATE_VIZ: str = "true" if USE_VISUALISATION else "false"
+CUDA_ORIENT_AGENTS: str = "true" if USE_VISUALISATION and VISUALISATION_ORIENT_AGENTS else "false"
+
+
+CUDA_GET_POP_INDEX_FUNCTION_NAME: str = "get_pop_index"
+CUDA_GET_POP_INDEX_FUNCTION: str = rf"""
+#ifndef GET_POP_INDEX_
+#define GET_POP_INDEX_
+// @TODO: @NOTE: ONLY FOR FOUR STRATEGIES ...UGH, TIME
+FLAMEGPU_HOST_DEVICE_FUNCTION unsigned int {CUDA_GET_POP_INDEX_FUNCTION_NAME}(const uint8_t strat_my, const uint8_t strat_other) {{
+    return strat_my * 4 + strat_other;
+}}
+#endif
+""" 
+
+
 CUDA_SEQ_TO_ANGLE_FUNCTION_NAME: str = "seq_to_angle"
 CUDA_SEQ_TO_ANGLE_FUNCTION: str = rf"""
 #ifndef SEQ_TO_ANGLE_
@@ -238,7 +281,7 @@ FLAMEGPU_HOST_DEVICE_FUNCTION float {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(const unsi
     return seq_map[seq % {SPACES_WITHIN_RADIUS}];
 }}
 #endif
-"""
+""" # if VISUALISATION_ORIENT_AGENTS else ""
 # general function that returns the new position based on the index/sequence of a wrapped moore neighborhood iterator.
 CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME: str = "pos_from_moore_seq"
 CUDA_POS_FROM_MOORE_SEQ_FUNCTION: str = rf"""
@@ -404,6 +447,23 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
     const unsigned int env_max = FLAMEGPU->environment.getProperty<unsigned int>("env_max");
 
     uint8_t challenge_sequence = FLAMEGPU->getVariable<uint8_t>("challenge_sequence");
+
+    // quick check to exit if we got too past the max
+    if (challenge_sequence >= {SPACES_WITHIN_RADIUS}) {{
+        const unsigned int trash_bin = FLAMEGPU->environment.getProperty<unsigned int>("trash_bin");
+        FLAMEGPU->message_out.setKey(trash_bin);
+        const uint8_t games_played = FLAMEGPU->getVariable<uint8_t>("games_played");
+        if (games_played < 1) {{
+            // we've run out of spaces, and no games have been played.
+            // that means that the agent(s) we were to play against have
+            // died and we can instead do a movement action this turn.
+            FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_MOVEMENT_UNRESOLVED});
+        }} else {{
+            FLAMEGPU->setVariable<unsigned int>("agent_status", {AGENT_STATUS_READY});
+        }}
+        return flamegpu::ALIVE;
+    }}
+
     const uint8_t response_sequence = {SPACES_WITHIN_RADIUS} - challenge_sequence - 1;
     FLAMEGPU->setVariable<uint8_t>("response_sequence", response_sequence);
 
@@ -415,7 +475,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
     // if it's 1, I challenge, if it's 0, I respond
     if (!my_challenge && !my_response) {{
         FLAMEGPU->setVariable<uint8_t>("round_resolved", 1);
-        if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
+        if ({CUDA_AGENT_MOVE_UPDATE_VIZ} && {CUDA_ORIENT_AGENTS}) {{
           FLAMEGPU->setVariable<float>("pitch", {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(challenge_sequence));
         }}
         FLAMEGPU->setVariable<uint8_t>("challenge_sequence", ++challenge_sequence);
@@ -505,6 +565,7 @@ FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_AGENT_PLAY_RESPONSE_CONDITION_NAME}) {{
 CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME: str = "play_response"
 CUDA_AGENT_PLAY_RESPONSE_FUNC: str = rf"""
 {CUDA_SEQ_TO_ANGLE_FUNCTION}
+{CUDA_GET_POP_INDEX_FUNCTION}
 // if we get here, we're kind of pretty sure we have to respond.
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageBucket, flamegpu::MessageBucket) {{
     const flamegpu::id_t my_id = FLAMEGPU->getID();
@@ -518,7 +579,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
             
             const uint8_t response_sequence = FLAMEGPU->getVariable<uint8_t>("response_sequence");
 
-            if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
+            if ({CUDA_AGENT_MOVE_UPDATE_VIZ} && {CUDA_ORIENT_AGENTS}) {{
               FLAMEGPU->setVariable<float>("pitch", {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(response_sequence));
             }}
             const flamegpu::id_t challenger_id = message.getVariable<flamegpu::id_t>("challenger_id");
@@ -623,6 +684,35 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
             FLAMEGPU->message_out.setVariable<flamegpu::id_t>("challenger_id", challenger_id);
             FLAMEGPU->message_out.setVariable<float>("challenger_energy", challenger_energy);
             if (my_energy <= 0)  {{
+                // @todo: refactor out into common function ([LOGGING])
+                if (FLAMEGPU->environment.getProperty<uint8_t>("strategy_pure") == 1) {{
+                    // all the same
+                    auto population_counts = FLAMEGPU->environment.getMacroProperty<unsigned int, {POPULATION_COUNT_BINS}>("population_counts");
+                    uint8_t my_strat = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", 0);
+                    unsigned int pop_idx = {CUDA_GET_POP_INDEX_FUNCTION_NAME}(my_strat, my_strat);
+                    --population_counts[pop_idx];
+                }} else if (FLAMEGPU->environment.getProperty<uint8_t>("strategy_per_trait") != 1) {{
+                    auto population_counts = FLAMEGPU->environment.getMacroProperty<unsigned int, {POPULATION_COUNT_BINS}>("population_counts");
+                    uint8_t strat_my = {AGENT_STRATEGY_COUNT} + 1;
+                    uint8_t strat_other = {AGENT_STRATEGY_COUNT} + 1;
+                    const uint8_t my_trait = FLAMEGPU->getVariable<uint8_t>("agent_trait");
+                    for (int i = 0; i < {AGENT_TRAIT_COUNT}; ++i) {{
+                        if (i == my_trait) {{
+                            strat_my = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
+                        }} else {{
+                            strat_other = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
+                        }}
+                        if (strat_my < {AGENT_STRATEGY_COUNT} && strat_other < {AGENT_STRATEGY_COUNT}) {{
+                            break;
+                        }}
+                    }}
+                    unsigned int pop_idx = {CUDA_GET_POP_INDEX_FUNCTION_NAME}(strat_my, strat_other);
+                    --population_counts[pop_idx];
+                }} else {{
+                // @TODO: implement this
+                
+                }}
+                // @todo: refactor out into common function ([LOGGING])
                 return flamegpu::DEAD;
             }}
             float max_energy = FLAMEGPU->environment.getProperty<float>("max_energy");
@@ -674,6 +764,7 @@ FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_AGENT_PLAY_RESOLVE_CONDITION_NAME}) {{
 
 CUDA_AGENT_PLAY_RESOLVE_FUNC_NAME: str = "play_resolve"
 CUDA_AGENT_PLAY_RESOLVE_FUNC: str = rf"""
+{CUDA_GET_POP_INDEX_FUNCTION}
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESOLVE_FUNC_NAME}, flamegpu::MessageBucket, flamegpu::MessageNone) {{
     const flamegpu::id_t my_id = FLAMEGPU->getID();
     
@@ -684,6 +775,35 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESOLVE_FUNC_NAME}, flamegpu::MessageBu
         if (challenger_id == my_id) {{
             const float my_energy = message.getVariable<float>("challenger_energy");
             if (my_energy <= 0) {{
+                // @todo: refactor out into common function ([LOGGING])
+                if (FLAMEGPU->environment.getProperty<uint8_t>("strategy_pure") == 1) {{
+                    // all the same
+                    auto population_counts = FLAMEGPU->environment.getMacroProperty<unsigned int, {POPULATION_COUNT_BINS}>("population_counts");
+                    uint8_t my_strat = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", 0);
+                    unsigned int pop_idx = {CUDA_GET_POP_INDEX_FUNCTION_NAME}(my_strat, my_strat);
+                    --population_counts[pop_idx];
+                }} else if (FLAMEGPU->environment.getProperty<uint8_t>("strategy_per_trait") != 1) {{
+                    auto population_counts = FLAMEGPU->environment.getMacroProperty<unsigned int, {POPULATION_COUNT_BINS}>("population_counts");
+                    uint8_t strat_my = {AGENT_STRATEGY_COUNT} + 1;
+                    uint8_t strat_other = {AGENT_STRATEGY_COUNT} + 1;
+                    const uint8_t my_trait = FLAMEGPU->getVariable<uint8_t>("agent_trait");
+                    for (int i = 0; i < {AGENT_TRAIT_COUNT}; ++i) {{
+                        if (i == my_trait) {{
+                            strat_my = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
+                        }} else {{
+                            strat_other = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
+                        }}
+                        if (strat_my < {AGENT_STRATEGY_COUNT} && strat_other < {AGENT_STRATEGY_COUNT}) {{
+                            break;
+                        }}
+                    }}
+                    unsigned int pop_idx = {CUDA_GET_POP_INDEX_FUNCTION_NAME}(strat_my, strat_other);
+                    --population_counts[pop_idx];
+                }} else {{
+                // @TODO: implement this
+                
+                }}
+                // @todo: refactor out into common function ([LOGGING])
                 return flamegpu::DEAD;
             }}
             FLAMEGPU->setVariable<float>("energy", my_energy);
@@ -715,6 +835,7 @@ CUDA_AGENT_MOVE_REQUEST_FUNCTION: str = rf"""
 {CUDA_POS_FROM_MOORE_SEQ_FUNCTION}
 {CUDA_POS_TO_BUCKET_ID_FUNCTION}
 {CUDA_SEQ_TO_ANGLE_FUNCTION}
+{CUDA_GET_POP_INDEX_FUNCTION}
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME}, flamegpu::MessageNone, flamegpu::MessageBucket) {{
     unsigned int last_move_attempt = FLAMEGPU->getVariable<unsigned int>("last_move_attempt");
 
@@ -729,6 +850,35 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME}, flamegpu::Messa
         my_energy -= travel_cost;
         if (my_energy <= 0.0) {{
             FLAMEGPU->message_out.setKey(FLAMEGPU->environment.getProperty<unsigned int>("trash_bin"));
+            // @todo: refactor out into common function ([LOGGING])
+            if (FLAMEGPU->environment.getProperty<uint8_t>("strategy_pure") == 1) {{
+                // all the same
+                auto population_counts = FLAMEGPU->environment.getMacroProperty<unsigned int, {POPULATION_COUNT_BINS}>("population_counts");
+                uint8_t my_strat = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", 0);
+                unsigned int pop_idx = {CUDA_GET_POP_INDEX_FUNCTION_NAME}(my_strat, my_strat);
+                --population_counts[pop_idx];
+            }} else if (FLAMEGPU->environment.getProperty<uint8_t>("strategy_per_trait") != 1) {{
+                auto population_counts = FLAMEGPU->environment.getMacroProperty<unsigned int, {POPULATION_COUNT_BINS}>("population_counts");
+                uint8_t strat_my = {AGENT_STRATEGY_COUNT} + 1;
+                uint8_t strat_other = {AGENT_STRATEGY_COUNT} + 1;
+                const uint8_t my_trait = FLAMEGPU->getVariable<uint8_t>("agent_trait");
+                for (int i = 0; i < {AGENT_TRAIT_COUNT}; ++i) {{
+                    if (i == my_trait) {{
+                        strat_my = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
+                    }} else {{
+                        strat_other = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
+                    }}
+                    if (strat_my < {AGENT_STRATEGY_COUNT} && strat_other < {AGENT_STRATEGY_COUNT}) {{
+                        break;
+                    }}
+                }}
+                unsigned int pop_idx = {CUDA_GET_POP_INDEX_FUNCTION_NAME}(strat_my, strat_other);
+                --population_counts[pop_idx];
+            }} else {{
+            // @TODO: implement this
+            
+            }}
+            // @todo: refactor out into common function ([LOGGING])
             return flamegpu::DEAD;
         }}
         FLAMEGPU->setVariable<float>("energy", my_energy);
@@ -778,7 +928,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME}, flamegpu::Messa
     FLAMEGPU->setVariable<unsigned int>("move_sequence", move_sequence);
 
     // we have a free space so attempt to move there
-    if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
+    if ({CUDA_AGENT_MOVE_UPDATE_VIZ} && {CUDA_ORIENT_AGENTS}) {{
       FLAMEGPU->setVariable<float>("pitch", {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(last_move_attempt - 1));
     }}
 
@@ -1040,7 +1190,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_GO_FORTH_FUNCTION_NAME}, flamegpu::Messa
     FLAMEGPU->setVariable<unsigned int>("reproduce_sequence", reproduce_sequence);
 
     // we have a free space so attempt to reproduce
-    if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
+    if ({CUDA_AGENT_MOVE_UPDATE_VIZ} && {CUDA_ORIENT_AGENTS}) {{
       FLAMEGPU->setVariable<float>("pitch", {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(last_reproduction_attempt - 1));
     }}
 
@@ -1074,6 +1224,7 @@ CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME: str = "god_multiply"
 CUDA_AGENT_GOD_MULTIPLY_FUNCTION: str = rf"""
 {CUDA_POS_FROM_MOORE_SEQ_FUNCTION}
 {CUDA_POS_TO_BUCKET_ID_FUNCTION}
+
 FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME}, flamegpu::MessageBucket, flamegpu::MessageNone) {{
     const unsigned int env_max = FLAMEGPU->environment.getProperty<unsigned int>("env_max");
     const unsigned int my_x = FLAMEGPU->getVariable<unsigned int>("x_a");
@@ -1183,41 +1334,74 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME}, flamegpu::Messa
     uint8_t my_strat;
     uint8_t child_strat;
     float mutation_roll;
-    if ({STRAT_PER_TRAIT}) {{
+    // @TODO: refactor, this is GROSSSSSSS HACK
+    // @todo: refactor out into common function ([LOGGING])
+    if (FLAMEGPU->environment.getProperty<uint8_t>("strategy_pure") == 1) {{
+        my_strat = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", 0);
+        child_strat = my_strat;
+        if (mutation_rate > 0.0) {{
+            mutation_roll = FLAMEGPU->random.uniform<float>();
+            while (child_strat == my_strat) {{
+                child_strat = FLAMEGPU->random.uniform<int>(0, {AGENT_STRATEGY_COUNT} - 1);
+            }}
+        }}
+        for (int i = 0; i < {AGENT_TRAIT_COUNT}; ++i) {{
+            FLAMEGPU->agent_out.setVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i, child_strat);
+        }}
+
+    // @TODO update population counts for strategy per trait (how?)
+    }} else if (FLAMEGPU->environment.getProperty<uint8_t>("strategy_per_trait") == 1) {{
         for (int i = 0; i < {AGENT_TRAIT_COUNT}; ++i) {{
             my_strat = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
             child_strat = my_strat;
-            mutation_roll = FLAMEGPU->random.uniform<float>();
-            if (mutation_roll < mutation_rate) {{
-                while (child_strat == my_strat) {{
-                    child_strat = FLAMEGPU->random.uniform<int>(0, {AGENT_STRATEGY_COUNT} - 1);
+            if (mutation_rate > 0.0) {{
+                mutation_roll = FLAMEGPU->random.uniform<float>();
+                if(mutation_roll < mutation_rate) {{
+                    while (child_strat == my_strat) {{
+                        child_strat = FLAMEGPU->random.uniform<int>(0, {AGENT_STRATEGY_COUNT} - 1);
+                    }}
                 }}
             }}
             FLAMEGPU->agent_out.setVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i, child_strat);
         }}
     }} else {{
-      mutation_roll = FLAMEGPU->random.uniform<float>();
-      float mutation_roll_other = FLAMEGPU->random.uniform<float>();
-      uint8_t child_strat_other = {AGENT_STRATEGY_COUNT} + 1;
-      for (int i = 0; i < {AGENT_TRAIT_COUNT}; ++i) {{
-          my_strat = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
-          child_strat = my_strat;
-          if (i == my_trait && mutation_roll < mutation_rate) {{
-              while (child_strat == my_strat) {{
-                  child_strat = FLAMEGPU->random.uniform<int>(0, {AGENT_STRATEGY_COUNT} - 1);
-              }}
-          }} else if (i != my_trait && child_strat_other < {AGENT_STRATEGY_COUNT}) {{
-              child_strat = child_strat_other;
-          }} else if (i != my_trait && mutation_roll_other < mutation_rate) {{
-              while (child_strat == my_strat) {{
-                  child_strat = FLAMEGPU->random.uniform<int>(0, {AGENT_STRATEGY_COUNT} - 1);
-              }}
-              child_strat_other = child_strat;
-          }}
-          FLAMEGPU->agent_out.setVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i, child_strat);
-          
-      }}
-
+        float mutation_roll_other = 1.0;
+        mutation_roll = 1.0;
+        if (mutation_rate > 0.0) {{
+            mutation_roll = FLAMEGPU->random.uniform<float>();
+            mutation_roll_other = FLAMEGPU->random.uniform<float>();
+        }}
+        uint8_t child_strat_other = {AGENT_STRATEGY_COUNT} + 1;
+        uint8_t child_strat_my = {AGENT_STRATEGY_COUNT} + 1;
+        for (int i = 0; i < {AGENT_TRAIT_COUNT}; ++i) {{
+            my_strat = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
+            child_strat = my_strat;
+            if (i == my_trait) {{
+                if (child_strat_my > {AGENT_STRATEGY_COUNT}) {{
+                    if (mutation_roll < mutation_rate) {{
+                        while (child_strat == my_strat) {{
+                            child_strat = FLAMEGPU->random.uniform<int>(0, {AGENT_STRATEGY_COUNT} - 1);
+                        }}
+                    }}
+                    child_strat_my = child_strat;
+                }} else {{
+                    child_strat = child_strat_my;
+                }}
+            }} else if (i != my_trait) {{
+                if (child_strat_other > {AGENT_STRATEGY_COUNT}) {{
+                    if (mutation_roll_other < mutation_rate) {{
+                        while (child_strat == my_strat) {{
+                            child_strat = FLAMEGPU->random.uniform<int>(0, {AGENT_STRATEGY_COUNT} - 1);
+                        }}
+                    }}
+                    child_strat_other = child_strat;
+                }} else {{
+                    child_strat = child_strat_other;
+                }}
+            }}
+            FLAMEGPU->agent_out.setVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i, child_strat);
+            
+        }}
     }}
 
     FLAMEGPU->agent_out.setVariable<unsigned int>("agent_status", {AGENT_STATUS_NEW_AGENT});
@@ -1234,16 +1418,69 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME}, flamegpu::Messa
 CUDA_ENVIRONMENTAL_PUNISHMENT_CONDITION_NAME: str = "environmental_punishment_condition"
 CUDA_ENVIRONMENTAL_PUNISHMENT_CONDITION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_ENVIRONMENTAL_PUNISHMENT_CONDITION_NAME}) {{
-    const unsigned int max_agents = FLAMEGPU->environment.getProperty<unsigned int>("max_agents");
-    return FLAMEGPU->getVariable<unsigned int>("agent_status") != {AGENT_STATUS_NEW_AGENT} || FLAMEGPU->getThreadIndex() >= max_agents;
+    // const unsigned int max_agents = FLAMEGPU->environment.getProperty<unsigned int>("max_agents");
+    return true;
+    // FLAMEGPU->getVariable<unsigned int>("agent_status") != {AGENT_STATUS_NEW_AGENT} || FLAMEGPU->getThreadIndex() >= max_agents;
 }}
 """
 CUDA_ENVIRONMENTAL_PUNISHMENT_NAME: str = "environmental_punishment"
 CUDA_ENVIRONMENTAL_PUNISHMENT_FUNCTION: str = rf"""
+{CUDA_GET_POP_INDEX_FUNCTION}
 FLAMEGPU_AGENT_FUNCTION({CUDA_ENVIRONMENTAL_PUNISHMENT_NAME}, flamegpu::MessageNone, flamegpu::MessageNone) {{
     // begin the cull
     const unsigned int max_agents = FLAMEGPU->environment.getProperty<unsigned int>("max_agents");
-    if (FLAMEGPU->getThreadIndex() >= max_agents) {{
+    
+    // @TODO FUCK THIS CODE OFF
+    const unsigned int agent_status = FLAMEGPU->getVariable<unsigned int>("agent_status");
+    if (agent_status == {AGENT_STATUS_NEW_AGENT} && FLAMEGPU->getThreadIndex() >= max_agents) {{
+        return flamegpu::DEAD;
+    }} else if (agent_status == {AGENT_STATUS_NEW_AGENT} || FLAMEGPU->getThreadIndex() >= max_agents) {{
+        // @todo: refactor out into common function ([LOGGING])
+        auto population_counts = FLAMEGPU->environment.getMacroProperty<unsigned int, {POPULATION_COUNT_BINS}>("population_counts");
+        unsigned int pop_idx = {POPULATION_COUNT_BINS} + 1;
+        uint8_t strat_my = {AGENT_STRATEGY_COUNT} + 1;
+        uint8_t strat_other = {AGENT_STRATEGY_COUNT} + 1;
+
+        if (FLAMEGPU->environment.getProperty<uint8_t>("strategy_pure") == 1) {{
+            // all the same
+            strat_my = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", 0);
+            strat_other = strat_my;
+        }} else if (FLAMEGPU->environment.getProperty<uint8_t>("strategy_per_trait") != 1) {{
+            const uint8_t my_trait = FLAMEGPU->getVariable<uint8_t>("agent_trait");
+            for (int i = 0; i < {AGENT_TRAIT_COUNT}; ++i) {{
+                if (i == my_trait) {{
+                    strat_my = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
+                }} else {{
+                    strat_other = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
+                }}
+                if (strat_my < {AGENT_STRATEGY_COUNT} && strat_other < {AGENT_STRATEGY_COUNT}) {{
+                    break;
+                }}
+            }}
+            
+        }} else {{
+        // @TODO: implement this
+        
+        }}
+
+        if (strat_my < {AGENT_STRATEGY_COUNT} && strat_other < {AGENT_STRATEGY_COUNT}) {{
+            pop_idx = {CUDA_GET_POP_INDEX_FUNCTION_NAME}(strat_my, strat_other);
+            if (agent_status == {AGENT_STATUS_NEW_AGENT}) {{
+                ++population_counts[pop_idx];   
+                return flamegpu::ALIVE; 
+            }} else {{
+                --population_counts[pop_idx];
+                return flamegpu::DEAD;
+            }}
+        }}
+        
+        if (agent_status == {AGENT_STATUS_NEW_AGENT}) {{
+            return flamegpu::ALIVE;   
+        }} else {{
+            return flamegpu::DEAD;
+        }}
+
+        // @todo: refactor out into common function ([LOGGING])
         return flamegpu::DEAD;
     }}
     float my_energy = FLAMEGPU->getVariable<float>("energy");
@@ -1254,6 +1491,35 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_ENVIRONMENTAL_PUNISHMENT_NAME}, flamegpu::MessageN
     }}
     my_energy -= cost_of_living;
     if (my_energy <= 0) {{
+        // @todo: refactor out into common function ([LOGGING])
+        if (FLAMEGPU->environment.getProperty<uint8_t>("strategy_pure") == 1) {{
+            // all the same
+            auto population_counts = FLAMEGPU->environment.getMacroProperty<unsigned int, {POPULATION_COUNT_BINS}>("population_counts");
+            uint8_t my_strat = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", 0);
+            unsigned int pop_idx = {CUDA_GET_POP_INDEX_FUNCTION_NAME}(my_strat, my_strat);
+            --population_counts[pop_idx];
+        }} else if (FLAMEGPU->environment.getProperty<uint8_t>("strategy_per_trait") != 1) {{
+            auto population_counts = FLAMEGPU->environment.getMacroProperty<unsigned int, {POPULATION_COUNT_BINS}>("population_counts");
+            uint8_t strat_my = {AGENT_STRATEGY_COUNT} + 1;
+            uint8_t strat_other = {AGENT_STRATEGY_COUNT} + 1;
+            const uint8_t my_trait = FLAMEGPU->getVariable<uint8_t>("agent_trait");
+            for (int i = 0; i < {AGENT_TRAIT_COUNT}; ++i) {{
+                if (i == my_trait) {{
+                    strat_my = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
+                }} else {{
+                    strat_other = FLAMEGPU->getVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i);
+                }}
+                if (strat_my < {AGENT_STRATEGY_COUNT} && strat_other < {AGENT_STRATEGY_COUNT}) {{
+                    break;
+                }}
+            }}
+            unsigned int pop_idx = {CUDA_GET_POP_INDEX_FUNCTION_NAME}(strat_my, strat_other);
+            --population_counts[pop_idx];
+        }} else {{
+        // @TODO: implement this
+        
+        }}
+        // @todo: refactor out into common function ([LOGGING])
         return flamegpu::DEAD;
     }}
     FLAMEGPU->setVariable<float>("energy", my_energy);
@@ -1291,20 +1557,101 @@ class step_fn(pyflamegpu.HostFunctionCallback):
         super().__init__()
 
     def run(self, FLAMEGPU: pyflamegpu.HostAPI):
-        if VERBOSE_OUTPUT:
-            prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
-            if FLAMEGPU.getStepCounter() % OUTPUT_EVERY_N_STEPS == 0:
-                _print_prisoner_states(prisoner)
-                mean, sd = prisoner.meanStandardDeviationFloat("energy")
-                print(f"mean energy: {mean}, sd: {sd}")
+        if WRITE_LOG and FLAMEGPU.getStepCounter() % OUTPUT_EVERY_N_STEPS == 0:
+            agent_pop_counts: pyflamegpu.HostMacroPropertyUInt = FLAMEGPU.environment.getMacroPropertyUInt("population_counts")
+            
+            for i in range(POPULATION_COUNT_BINS):
+                pop_i: int = int(agent_pop_counts[i])
+                if pop_i != 0:
+                    FLAMEGPU.environment.setPropertyUInt("population_counts_step", i, pop_i)
 
 
+
+# set up population
 class init_fn(pyflamegpu.HostFunctionCallback):
-    def __init__(self):
-        super().__init__()
-
     def run(self, FLAMEGPU: pyflamegpu.HostAPI):
-        FLAMEGPU.environment.setPropertyUInt("agent_count", INIT_AGENT_COUNT)
+        agent_strat_per_trait = FLAMEGPU.environment.getPropertyUInt8("strategy_per_trait")
+        agent_strat_pure = FLAMEGPU.environment.getPropertyUInt8("strategy_pure")
+
+        # FLAMEGPU.environment.setPropertyUInt("agent_count", INIT_AGENT_COUNT)
+        agent: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
+        agent_pop_counts: pyflamegpu.HostMacroPropertyUInt = FLAMEGPU.environment.getMacroPropertyUInt("population_counts")
+        # randomly create starting position for agents
+        import numpy as np
+        if RANDOM_SEED is not None:
+            np.random.RandomState(RANDOM_SEED)
+        # initialise grid with id for all possible agents
+        grid = np.arange(MAX_AGENT_SPACES, dtype=np.uint32)
+        # shuffle grid
+        np.random.shuffle(grid)
+        # reshape it to match the environment size
+        grid = np.reshape(grid, (ENV_MAX, ENV_MAX))
+        # Iterate the population, initialising per-agent values
+        instance: pyflamegpu.AgentInstance
+        for i in range(INIT_AGENT_COUNT):  # type: ignore
+            instance = agent.newAgent()
+            # find agent position in grid
+            pos = np.where(grid == i)
+            x = pos[0][0].item()
+            y = pos[1][0].item()
+            instance.setVariableUInt("x_a", int(x))
+            instance.setVariableUInt("y_a", int(y))
+            # instance.setVariableUInt("grid_index", int(x + y * ENV_MAX))
+            if USE_VISUALISATION:
+                instance.setVariableFloat("x", float(x))
+                instance.setVariableFloat("y", float(y))
+                if VISUALISATION_ORIENT_AGENTS:
+                    instance.setVariableFloat("pitch", 0.0)
+                
+            energy = max(random.normalvariate(INIT_ENERGY_MU,
+                         INIT_ENERGY_SIGMA), INIT_ENERGY_MIN)
+            if MAX_ENERGY > 0.0:
+                energy = min(energy, MAX_ENERGY)
+            instance.setVariableFloat("energy", energy)
+            # select agent strategy
+            agent_trait: int = random.choice(AGENT_TRAITS)
+            instance.setVariableUInt8("agent_trait", agent_trait)
+            # this could be based on strategy, or change during runtime!
+            instance.setVariableUInt("agent_color", agent_trait)
+            
+            # select agent strategy
+            if agent_strat_pure == 1:
+                agent_strategies = random.choices(AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=1)*AGENT_TRAIT_COUNT
+            elif agent_strat_per_trait == 1:
+                # if we are using a per-trait strategy, then pick random weighted strategies
+                agent_strategies = random.choices(AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=AGENT_TRAIT_COUNT)
+            else:
+                # otherwise, we need a strategy for agents with matching traits
+                # and a second for agents with different traits
+                strategy_my: int
+                strategy_other: int
+                strategy_my, strategy_other = random.choices(
+                    AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=2)
+                agent_strategies: List[int] = []
+                trait: int
+                for i, trait in enumerate(AGENT_TRAITS):
+                    if trait == agent_trait:
+                        agent_strategies.append(strategy_my)
+                    else:
+                        agent_strategies.append(strategy_other)
+            instance.setVariableArrayUInt8('agent_strategies', agent_strategies)
+            strat_my: int = -1
+            strat_other: int = -1
+            for i, strat in enumerate(agent_strategies):
+                # update population counts of strategies
+                if strat_other < 0 and agent_trait != i:
+                    strat_other = strat
+                if strat_my < 0 and agent_trait == i:
+                    strat_my = strat
+                if strat_my >= 0 and strat_other >= 0:
+                    break
+            # convert "base 4" to base 10 for indexing
+            idx = (strat_my * 4) + strat_other
+            # print(strat_my, strat_other, idx)
+            # print(type(idx))
+            agent_pop_counts[idx] = int(agent_pop_counts[idx]) + 1
+            
+        del x, y, grid, np
 
 
 class exit_play_fn(pyflamegpu.HostFunctionConditionCallback):
@@ -1412,7 +1759,8 @@ def make_core_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescr
     if USE_VISUALISATION:
         agent.newVariableFloat("x")
         agent.newVariableFloat("y")
-        agent.newVariableFloat("pitch")
+        if VISUALISATION_ORIENT_AGENTS:
+            agent.newVariableFloat("pitch")
 
     return agent
 
@@ -1429,6 +1777,11 @@ def add_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
     env.newPropertyUInt("trash_bin", BUCKET_SIZE, isConst=True)
     env.newPropertyUInt("agent_count", 0)
     env.newPropertyUInt8("overpopulated", 0)
+    env.newPropertyFloat("env_noise", ENV_NOISE, isConst=True)
+    env.newMacroPropertyUInt("population_counts", POPULATION_COUNT_BINS)
+    env.newPropertyUInt8("strategy_per_trait", 1 if AGENT_STRATEGY_PER_TRAIT else 0, isConst=True)
+    env.newPropertyUInt8("strategy_pure", 1 if AGENT_STRATEGY_PURE else 0, isConst=True)
+    # env.newPropertyArrayUInt("population_strat_count", AGENT_STRATEGY_COUNT)
 
 
 def add_pdgame_vars(agent: pyflamegpu.AgentDescription) -> None:
@@ -1445,7 +1798,7 @@ def add_pdgame_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
     env.newPropertyFloat("payoff_cd", PAYOFF_CD, isConst=True)
     env.newPropertyFloat("payoff_dc", PAYOFF_DC, isConst=True)
     env.newPropertyFloat("payoff_dd", PAYOFF_DD, isConst=True)
-    env.newPropertyFloat("env_noise", ENV_NOISE, isConst=True)
+    
     env.newPropertyFloat("max_energy", MAX_ENERGY, isConst=True)
 
 
@@ -1456,7 +1809,7 @@ def add_movement_vars(agent: pyflamegpu.AgentDescription) -> None:
 
 
 def add_movement_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
-    env.newMacroPropertyUInt("move_requests", ENV_MAX, ENV_MAX)
+    # env.newMacroPropertyUInt("move_requests", ENV_MAX, ENV_MAX)
     env.newPropertyFloat("travel_cost", AGENT_TRAVEL_COST, isConst=True)
 
 
@@ -1494,13 +1847,83 @@ def add_god_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
 def _print_environment_properties() -> None:
     print(f"env_max (grid width): {ENV_MAX}")
     print(f"max agent count: {MAX_AGENT_SPACES}")
+    print(f"random seed: {RANDOM_SEED}")
 
 # Define a method which when called will define the model, Create the simulation object and execute it.
+def configure_visualisation(simulation: pyflamegpu.CUDASimulation) -> pyflamegpu.ModelVis:
+    visualisation: pyflamegpu.ModelVis = simulation.getVisualisation()
+    visualisation.setBeginPaused(PAUSE_AT_START)
+    # Configure the visualiastion.
+    INIT_CAM = ENV_MAX / 2.0
+    visualisation.setInitialCameraLocation(INIT_CAM, INIT_CAM, ENV_MAX)
+    visualisation.setInitialCameraTarget(INIT_CAM, INIT_CAM, 0.0)
+    visualisation.setCameraSpeed(VISUALISATION_CAMERA_SPEED)
+    visualisation.setClearColor(*VISUALISATION_BG_RGB)
+    
+    visualisation.setSimulationSpeed(SIMULATION_SPS_LIMIT)
 
+    vis_agent: pyflamegpu.AgentVis = visualisation.addAgent("prisoner")
+
+    # Set the model to use, and scale it.
+    vis_agent.setModel(AGENT_DEFAULT_SHAPE)
+    vis_agent.setModelScale(AGENT_DEFAULT_SCALE)
+    vis_agent.setColor(AGENT_COLOR_SCHEME)
+    if VISUALISATION_ORIENT_AGENTS:
+        vis_agent.setPitchVariable("pitch")
+
+    # Activate the visualisation.
+    return visualisation
+
+def configure_simulation_single(model: pyflamegpu.ModelDescription, argv: list[str]) -> pyflamegpu.CUDASimulation:
+    simulation: pyflamegpu.CUDASimulation = pyflamegpu.CUDASimulation(model)
+    # set some simulation defaults
+    if RANDOM_SEED is not None:
+        simulation.SimulationConfig().random_seed = RANDOM_SEED
+    simulation.SimulationConfig().steps = STEP_COUNT
+    simulation.SimulationConfig().verbose = DEBUG_OUTPUT
+    simulation.SimulationConfig().common_log_file = LOG_FILE
+    # Initialise the simulation
+    simulation.initialise(argv)
+    # Generate a population if an initial states file is not provided
+    if not simulation.SimulationConfig().input_file:
+        # Seed the host RNG using the cuda simulations' RNG
+        if RANDOM_SEED is not None:
+            random.seed(simulation.SimulationConfig().random_seed)
+    
+    return simulation
+
+def configure_ensemble(model: pyflamegpu.ModelDescription, argv: list[str]) -> pyflamegpu.CUDAEnsemble:
+    ensemble: pyflamegpu.CUDAEnsemble = pyflamegpu.CUDAEnsemble(model)
+    ensemble.Config().out_directory = "data"
+    ensemble.Config().out_format = "json"
+
+    ensemble.initialise(argv)
+    
+    return ensemble
+
+def configure_runplan(model: pyflamegpu.ModelDescription) -> pyflamegpu.RunPlanVector:
+    # How man initial runs for each
+    runs_control: pyflamegpu.RunPlanVector = pyflamegpu.RunPlanVector(model, MULTI_RUN_COUNT)
+    if RANDOM_SEED:
+        # increment random seed by one each time
+        runs_control.setRandomSimulationSeed(RANDOM_SEED, 1)
+        # so all props for this run get the same seed if dists etc.
+        runs_control.setRandomPropertySeed(RANDOM_SEED)
+    runs_control.setSteps(MULTI_RUN_STEPS)
+    runs: pyflamegpu.RunPlanVector = pyflamegpu.RunPlanVector(model, 0)
+    # Initialise environment property 'lerp_float' with values uniformly distributed between 1 and 128
+    # runs_control.setPropertyUniformDistributionFloat("lerp_float", 1.0, 128.0)
+    for pure_stategy in [0, 1]:
+        for cost_of_living in [0, 0.1, 1, 5, 10]:
+            runs_control.setOutputSubdirectory("pure%g_env_cost%g"%(pure_stategy, cost_of_living))
+            runs_control.setPropertyUInt8("strategy_pure", pure_stategy)
+            runs_control.setPropertyFloat("cost_of_living", cost_of_living)
+            runs_control.setPropertyFloat("travel_cost", cost_of_living)
+            runs += runs_control
+    return runs
 
 def main():
-    if VERBOSE_OUTPUT:
-        _print_environment_properties()
+    _print_environment_properties()
     if pyflamegpu.SEATBELTS:
         print("Seatbelts are enabled, this will significantly impact performance.")
         print("Buckle up if you are developing the model. Otherwise throw caution to the wind and use a pyflamegpu build without seatbelts.")
@@ -1512,8 +1935,12 @@ def main():
     env.newPropertyFloat("cost_of_living", COST_OF_LIVING, isConst=True)
     env.newPropertyUInt("max_agents", AGENT_HARD_LIMIT, isConst=True)
     env.newPropertyFloat("max_energy", MAX_ENERGY, isConst=True)
+    env.newPropertyArrayUInt("population_counts_step", [0] * POPULATION_COUNT_BINS)
+    env.newPropertyFloat("travel_cost", AGENT_TRAVEL_COST, isConst=True)
 
     model.addStepFunctionCallback(step_fn().__disown__())
+    # create all agents here
+    model.addInitFunctionCallback(init_fn().__disown__())
 
     agent = make_core_agent(model)
 
@@ -1772,115 +2199,36 @@ def main():
     main_layer7: pyflamegpu.LayerDescription = model.newLayer()
     main_layer7.addAgentFunction(agent_environmental_punishment_fn)
 
-    simulation: pyflamegpu.CUDASimulation = pyflamegpu.CUDASimulation(model)
+    # plan: pyflamegpu.RunPlan = pyflamegpu.RunPlan(model)
+    # if RANDOM_SEED:
+    #     plan.setRandomSimulationSeed(RANDOM_SEED)
+    # plan.setSteps(STEP_COUNT)
 
-    if USE_VISUALISATION:
-        visualisation: pyflamegpu.ModelVis = simulation.getVisualisation()
-        visualisation.setBeginPaused(PAUSE_AT_START)
-        # Configure the visualiastion.
-        INIT_CAM = ENV_MAX / 2.0
-        visualisation.setInitialCameraLocation(INIT_CAM, INIT_CAM, ENV_MAX)
-        visualisation.setInitialCameraTarget(INIT_CAM, INIT_CAM, 0.0)
-        visualisation.setCameraSpeed(VISUALISATION_CAMERA_SPEED)
-        visualisation.setClearColor(*VISUALISATION_BG_RGB)
-        # do not limit speed
-        visualisation.setSimulationSpeed(SIMULATION_SPS_LIMIT)
-
-        vis_agent: pyflamegpu.AgentVis = visualisation.addAgent("prisoner")
-
-        # Set the model to use, and scale it.
-        vis_agent.setModel(AGENT_DEFAULT_SHAPE)
-        vis_agent.setModelScale(AGENT_DEFAULT_SCALE)
-        vis_agent.setColor(AGENT_COLOR_SCHEME)
-        vis_agent.setPitchVariable("pitch")
-
-        # Activate the visualisation.
-        visualisation.activate()
-
-    # set some simulation defaults
-    if RANDOM_SEED is not None:
-        simulation.SimulationConfig().random_seed = RANDOM_SEED
-    simulation.SimulationConfig().steps = STEP_COUNT
-    simulation.SimulationConfig().verbose = DEBUG_OUTPUT
-
-    # Initialise the simulation
-    simulation.initialise(sys.argv)
-
-    # Generate a population if an initial states file is not provided
-    if not simulation.SimulationConfig().input_file:
-        # Seed the host RNG using the cuda simulations' RNG
-        if RANDOM_SEED is not None:
-            random.seed(simulation.SimulationConfig().random_seed)
-        # Generate a vector of agents
-        population = pyflamegpu.AgentVector(agent, INIT_AGENT_COUNT)
-
-        # randomly create starting position for agents
-        import numpy as np
-        if RANDOM_SEED is not None:
-            np.random.RandomState(RANDOM_SEED)
-        # initialise grid with id for all possible agents
-        grid = np.arange(MAX_AGENT_SPACES, dtype=np.uint32)
-        # shuffle grid
-        np.random.shuffle(grid)
-        # reshape it to match the environment size
-        grid = np.reshape(grid, (ENV_MAX, ENV_MAX))
-        # Iterate the population, initialising per-agent values
-        instance: pyflamegpu.AgentVector_Agent
-        for i, instance in enumerate(population):  # type: ignore
-            # find agent position in grid
-            pos = np.where(grid == i)
-            x = pos[0][0].item()
-            y = pos[1][0].item()
-            instance.setVariableUInt("x_a", int(x))
-            instance.setVariableUInt("y_a", int(y))
-            # instance.setVariableUInt("grid_index", int(x + y * ENV_MAX))
-            if USE_VISUALISATION:
-                instance.setVariableFloat("x", float(x))
-                instance.setVariableFloat("y", float(y))
-                instance.setVariableFloat("pitch", 0.0)
-                
-            energy = max(random.normalvariate(INIT_ENERGY_MU,
-                         INIT_ENERGY_SIGMA), INIT_ENERGY_MIN)
-            if MAX_ENERGY > 0.0:
-                energy = min(energy, MAX_ENERGY)
-            instance.setVariableFloat("energy", energy)
-            # select agent strategy
-            agent_trait: int = random.choice(AGENT_TRAITS)
-            instance.setVariableUInt8("agent_trait", agent_trait)
-            # this could be based on strategy, or change during runtime!
-            instance.setVariableUInt("agent_color", agent_trait)
-            
-            # select agent strategy
-            if AGENT_STRATEGY_PER_TRAIT:
-                # if we are using a per-trait strategy, then pick random weighted strategies
-                instance.setVariableArrayUInt8('agent_strategies', random.choices(
-                    AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=AGENT_TRAIT_COUNT))
-            else:
-                # otherwise, we need a strategy for agents with matching traits
-                # and a second for agents with different traits
-                strategy_my: int
-                strategy_other: int
-                strategy_my, strategy_other = random.choices(
-                    AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=2)
-                agent_strategies: List[int] = []
-                trait: int
-                for i, trait in enumerate(AGENT_TRAITS):
-                    if trait == agent_trait:
-                        agent_strategies.append(strategy_my)
-                    else:
-                        agent_strategies.append(strategy_other)
-                instance.setVariableArrayUInt8(
-                    'agent_strategies', agent_strategies)
-        del x, y, grid, np
-        # Set the population for the simulation object
-        simulation.setPopulationData(population)
-
-    simulation.simulate()
-    # Potentially export the population to disk
-    # simulation.exportData("end.xml")
-    # If visualisation is enabled, end the visualisation
-    if USE_VISUALISATION:
-        visualisation.join() #type: ignore
+    if not MULTI_RUN:
+        print("Configuring simulation...")
+        simulation = configure_simulation_single(model, sys.argv)
+        print("Configuring logging...")
+        step_log_cfg = configure_logging(model)
+        simulation.setStepLog(step_log_cfg)
+        if USE_VISUALISATION:
+            print("Configuring visualisation...")
+            visualisation = configure_visualisation(simulation)
+            visualisation.activate()
+        print("Running simulation...")
+        simulation.simulate()
+        if USE_VISUALISATION:
+            visualisation.join() #type: ignore
+    else:
+        print("Configuring CUDAEnsemble...")
+        ensemble = configure_ensemble(model, sys.argv)
+        print("Configuring logging...")
+        step_log_cfg = configure_logging(model)
+        ensemble.setStepLog(step_log_cfg)
+        print("Configuring run plan...")
+        runs = configure_runplan(model)
+        print("Running simulation...")
+        ensemble.simulate(runs)
+    
 
 
 if __name__ == "__main__":
