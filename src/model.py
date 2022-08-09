@@ -20,6 +20,7 @@ __VERSION_STR__ = f"{__name__} v{__VERSION__}"
 # @TODO: resolv condition where an agent plays a neighbour and dies
 # but another neighbour has no games to play (they should move).
 
+from time import strftime
 from typing import List
 import pyflamegpu
 # Import standard python libs that are used
@@ -33,7 +34,7 @@ import math
 ##########################################
 
 # Define some constants
-RANDOM_SEED: int = 69420
+RANDOM_SEED: int = random.randint(0, 2 ** 32 / 2 - 1)
 
 # upper agent limit ... please make it a square number for sanity
 # this is essentially the size of the grid
@@ -43,12 +44,13 @@ INIT_AGENT_COUNT: int = MAX_AGENT_SPACES // 32
 
 # you can set this anywhere between INIT_AGENT_COUNT and MAX_AGENT_COUNT inclusive
 # carrying capacity
-AGENT_HARD_LIMIT: int = int(MAX_AGENT_SPACES * 0.9)
+AGENT_HARD_LIMIT: int = int(MAX_AGENT_SPACES * 0.5)
 
 # how long to run the sim for
-STEP_COUNT: int = 10000
+STEP_COUNT: int = 100
 # TODO: logging / Debugging
-
+WRITE_LOG: bool = True
+LOG_FILE: str = f"data/{strftime('%Y-%m-%d %H-%M-%S')}_{RANDOM_SEED}.json"
 VERBOSE_OUTPUT: bool = False
 DEBUG_OUTPUT: bool = False
 OUTPUT_EVERY_N_STEPS: int = 10
@@ -65,7 +67,8 @@ VISUALISATION_CAMERA_SPEED: float = 0.1
 PAUSE_AT_START: bool = True
 VISUALISATION_BG_RGB: List[float] = [0.1, 0.1, 0.1]
 
-
+# should agents rotate to face the direction of their last action?
+VISUALISATION_ORIENT_AGENTS: bool = False
 # radius of message search grid (broken now from hardcoded x,y offset map)
 MAX_PLAY_DISTANCE: int = 1
 
@@ -109,7 +112,7 @@ INIT_ENERGY_SIGMA: float = 10.0
 # but this allows for 5 moves before death.
 INIT_ENERGY_MIN: float = min(5.0 * COST_OF_LIVING + 5.0 * AGENT_TRAVEL_COST, MAX_ENERGY - 1.0)
 # Noise will invert the agent's decision
-ENV_NOISE: float = 0.01
+ENV_NOISE: float = 0.0
 
 # Agent strategies for the PD game
 # "proportion" let's you say how likely agents spawn with a particular strategy
@@ -122,28 +125,29 @@ AGENT_STRATEGIES: dict = {
     "always_coop": {
         "name": "always_coop",
         "id": AGENT_STRATEGY_COOP,
-        "proportion": 1/4,
+        "proportion": 0.0,
     },
     "always_defect": {
         "name": "always_defect",
         "id": AGENT_STRATEGY_DEFECT,
-        "proportion": 1/4,
+        "proportion": 0.0,
     },
     # defaults to coop if no previous play recorded
     "tit_for_tat": {
         "name": "tit_for_tat",
         "id": AGENT_STRATEGY_TIT_FOR_TAT,
-        "proportion": 1/4,
+        "proportion": 1.0,
     },
     "random": {
       "name": "random",
       "id": AGENT_STRATEGY_RANDOM,
-      "proportion": 1/4,
+      "proportion": 0.0,
     },
 }
 
 # How many variants of agents are there?, more wil result in more agent colors
 AGENT_TRAIT_COUNT: int = 4
+# @TODO: allow for 1 trait (implies no strategy per trait)
 # AGENT_TRAIT_COUNT: int = 1
 
 # Should an agent deal differently per variant? (max strategies = number of variants)
@@ -151,7 +155,7 @@ AGENT_TRAIT_COUNT: int = 4
 AGENT_STRATEGY_PER_TRAIT: bool = False
 
 # Mutation frequency
-AGENT_TRAIT_MUTATION_RATE: float = 0.005
+AGENT_TRAIT_MUTATION_RATE: float = 0.0
 
 
 ##########################################
@@ -160,6 +164,18 @@ AGENT_TRAIT_MUTATION_RATE: float = 0.005
 # You should not need to change anything #
 # below this line                        #
 ##########################################
+
+# set up logging
+def configure_logging(model: pyflamegpu.ModelDescription, simulation: pyflamegpu.CUDASimulation) -> None: 
+    step_log_cfg = pyflamegpu.StepLoggingConfig(model)
+    step_log_cfg.setFrequency(OUTPUT_EVERY_N_STEPS)
+    step_log_cfg.agent("prisoner").logCount()
+
+    simulation.setStepLog(step_log_cfg)
+    #step_log_cfg
+
+
+
 AGENT_RESULT_COOP: int = 0
 AGENT_RESULT_DEFECT: int = 1
 
@@ -224,6 +240,8 @@ CENTER_SPACE: int = SPACES_WITHIN_RADIUS // 2
 
 # if we use visualisation, update agent position and direction.
 CUDA_AGENT_MOVE_UPDATE_VIZ: str = "true" if USE_VISUALISATION else "false"
+CUDA_ORIENT_AGENTS: str = "true" if USE_VISUALISATION and VISUALISATION_ORIENT_AGENTS else "false"
+
 CUDA_SEQ_TO_ANGLE_FUNCTION_NAME: str = "seq_to_angle"
 CUDA_SEQ_TO_ANGLE_FUNCTION: str = rf"""
 #ifndef SEQ_TO_ANGLE_
@@ -238,7 +256,7 @@ FLAMEGPU_HOST_DEVICE_FUNCTION float {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(const unsi
     return seq_map[seq % {SPACES_WITHIN_RADIUS}];
 }}
 #endif
-"""
+""" # if VISUALISATION_ORIENT_AGENTS else ""
 # general function that returns the new position based on the index/sequence of a wrapped moore neighborhood iterator.
 CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME: str = "pos_from_moore_seq"
 CUDA_POS_FROM_MOORE_SEQ_FUNCTION: str = rf"""
@@ -415,7 +433,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME}, flamegpu::Message
     // if it's 1, I challenge, if it's 0, I respond
     if (!my_challenge && !my_response) {{
         FLAMEGPU->setVariable<uint8_t>("round_resolved", 1);
-        if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
+        if ({CUDA_AGENT_MOVE_UPDATE_VIZ} && {CUDA_ORIENT_AGENTS}) {{
           FLAMEGPU->setVariable<float>("pitch", {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(challenge_sequence));
         }}
         FLAMEGPU->setVariable<uint8_t>("challenge_sequence", ++challenge_sequence);
@@ -518,7 +536,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME}, flamegpu::MessageB
             
             const uint8_t response_sequence = FLAMEGPU->getVariable<uint8_t>("response_sequence");
 
-            if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
+            if ({CUDA_AGENT_MOVE_UPDATE_VIZ} && {CUDA_ORIENT_AGENTS}) {{
               FLAMEGPU->setVariable<float>("pitch", {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(response_sequence));
             }}
             const flamegpu::id_t challenger_id = message.getVariable<flamegpu::id_t>("challenger_id");
@@ -778,7 +796,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME}, flamegpu::Messa
     FLAMEGPU->setVariable<unsigned int>("move_sequence", move_sequence);
 
     // we have a free space so attempt to move there
-    if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
+    if ({CUDA_AGENT_MOVE_UPDATE_VIZ} && {CUDA_ORIENT_AGENTS}) {{
       FLAMEGPU->setVariable<float>("pitch", {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(last_move_attempt - 1));
     }}
 
@@ -1040,7 +1058,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_GO_FORTH_FUNCTION_NAME}, flamegpu::Messa
     FLAMEGPU->setVariable<unsigned int>("reproduce_sequence", reproduce_sequence);
 
     // we have a free space so attempt to reproduce
-    if ({CUDA_AGENT_MOVE_UPDATE_VIZ}) {{
+    if ({CUDA_AGENT_MOVE_UPDATE_VIZ} && {CUDA_ORIENT_AGENTS}) {{
       FLAMEGPU->setVariable<float>("pitch", {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(last_reproduction_attempt - 1));
     }}
 
@@ -1412,7 +1430,8 @@ def make_core_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescr
     if USE_VISUALISATION:
         agent.newVariableFloat("x")
         agent.newVariableFloat("y")
-        agent.newVariableFloat("pitch")
+        if VISUALISATION_ORIENT_AGENTS:
+            agent.newVariableFloat("pitch")
 
     return agent
 
@@ -1494,13 +1513,13 @@ def add_god_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
 def _print_environment_properties() -> None:
     print(f"env_max (grid width): {ENV_MAX}")
     print(f"max agent count: {MAX_AGENT_SPACES}")
+    print(f"random seed: {RANDOM_SEED}")
 
 # Define a method which when called will define the model, Create the simulation object and execute it.
 
 
 def main():
-    if VERBOSE_OUTPUT:
-        _print_environment_properties()
+    _print_environment_properties()
     if pyflamegpu.SEATBELTS:
         print("Seatbelts are enabled, this will significantly impact performance.")
         print("Buckle up if you are developing the model. Otherwise throw caution to the wind and use a pyflamegpu build without seatbelts.")
@@ -1792,7 +1811,8 @@ def main():
         vis_agent.setModel(AGENT_DEFAULT_SHAPE)
         vis_agent.setModelScale(AGENT_DEFAULT_SCALE)
         vis_agent.setColor(AGENT_COLOR_SCHEME)
-        vis_agent.setPitchVariable("pitch")
+        if VISUALISATION_ORIENT_AGENTS:
+            vis_agent.setPitchVariable("pitch")
 
         # Activate the visualisation.
         visualisation.activate()
@@ -1802,9 +1822,12 @@ def main():
         simulation.SimulationConfig().random_seed = RANDOM_SEED
     simulation.SimulationConfig().steps = STEP_COUNT
     simulation.SimulationConfig().verbose = DEBUG_OUTPUT
+    simulation.SimulationConfig().common_log_file = LOG_FILE
 
     # Initialise the simulation
     simulation.initialise(sys.argv)
+
+    configure_logging(model, simulation)
 
     # Generate a population if an initial states file is not provided
     if not simulation.SimulationConfig().input_file:
@@ -1837,7 +1860,8 @@ def main():
             if USE_VISUALISATION:
                 instance.setVariableFloat("x", float(x))
                 instance.setVariableFloat("y", float(y))
-                instance.setVariableFloat("pitch", 0.0)
+                if VISUALISATION_ORIENT_AGENTS:
+                    instance.setVariableFloat("pitch", 0.0)
                 
             energy = max(random.normalvariate(INIT_ENERGY_MU,
                          INIT_ENERGY_SIGMA), INIT_ENERGY_MIN)
