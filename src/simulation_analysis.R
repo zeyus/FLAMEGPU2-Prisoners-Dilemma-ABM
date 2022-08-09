@@ -78,7 +78,7 @@ df_agent_strategy <- data.frame(matrix(ncol = 17, nrow = 0))
 
 
 
-json_file <- "data/pure0_env_cost10_10000_steps/4.json"
+json_file <- "tmp/pure0_env_cost1_10000_steps/2.json"
 
 # note, the JSON files append a new json object,
 # so we need to read in the whole file.
@@ -114,9 +114,10 @@ df_agent_strategy_long <- df_agent_strategy %>% pivot_longer(
   names_to = "strategy",
   values_to = "agent_count"
 )
+rm(df_agent_strategy)
 
 df_agent_strategy_long$agent_count <-
-  as.numeric(df_agent_strategy_long$agent_count)
+  as.integer(df_agent_strategy_long$agent_count)
 
 df_agent_strategy_long$strategy <- as.factor(df_agent_strategy_long$strategy)
 
