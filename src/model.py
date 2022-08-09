@@ -35,7 +35,7 @@ import math
 ##########################################
 
 # Define some constants
-RANDOM_SEED: int = random.randint(0, 2 ** 32 / 2 - 1)
+RANDOM_SEED: int = 675917224 #random.randint(0, 2 ** 32 / 2 - 1)
 
 # upper agent limit ... please make it a square number for sanity
 # this is essentially the size of the grid
@@ -60,7 +60,7 @@ OUTPUT_EVERY_N_STEPS: int = 1
 SIMULATION_SPS_LIMIT: int = 0  # 0 = unlimited
 
 # Show agent visualisation
-USE_VISUALISATION: bool = False and pyflamegpu.VISUALISATION
+USE_VISUALISATION: bool = True and pyflamegpu.VISUALISATION
 
 # visualisation camera speed
 VISUALISATION_CAMERA_SPEED: float = 0.1
@@ -74,7 +74,7 @@ VISUALISATION_ORIENT_AGENTS: bool = False
 MAX_PLAY_DISTANCE: int = 1
 
 # Energy cost per step
-COST_OF_LIVING: float = 1.0
+COST_OF_LIVING: float = 10.0
 
 # Reproduce if energy is above this threshold
 REPRODUCE_MIN_ENERGY: float = 100.0
@@ -111,7 +111,7 @@ INIT_ENERGY_MU: float = 50.0
 INIT_ENERGY_SIGMA: float = 10.0
 # of cours this can be a specific value
 # but this allows for 5 moves before death.
-INIT_ENERGY_MIN: float = min(5.0 * COST_OF_LIVING + 5.0 * AGENT_TRAVEL_COST, MAX_ENERGY - 1.0)
+INIT_ENERGY_MIN: float = 5.0
 # Noise will invert the agent's decision
 ENV_NOISE: float = 0.0
 
@@ -154,7 +154,7 @@ AGENT_TRAIT_COUNT: int = 4
 
 # if this is true, agents will just have ONE strategy for all
 # regardless of AGENT_STRATEGY_PER_TRAIT setting.
-AGENT_STRATEGY_PURE: bool = True
+AGENT_STRATEGY_PURE: bool = False
 # Should an agent deal differently per variant? (max strategies = number of variants)
 # or, should they have a strategy for same vs different (max strategies = 2)
 AGENT_STRATEGY_PER_TRAIT: bool = False
@@ -163,9 +163,9 @@ AGENT_STRATEGY_PER_TRAIT: bool = False
 AGENT_TRAIT_MUTATION_RATE: float = 0.0
 
 
-MULTI_RUN = True
-MULTI_RUN_STEPS = 5000
-MULTI_RUN_COUNT = 10
+MULTI_RUN = False
+MULTI_RUN_STEPS = 10000
+MULTI_RUN_COUNT = 1
 
 ##########################################
 # Main script                            #
@@ -1651,7 +1651,7 @@ class init_fn(pyflamegpu.HostFunctionCallback):
             # print(type(idx))
             agent_pop_counts[idx] = int(agent_pop_counts[idx]) + 1
             
-        del x, y, grid, np
+        del grid, np
 
 
 class exit_play_fn(pyflamegpu.HostFunctionConditionCallback):
@@ -1915,10 +1915,10 @@ def configure_runplan(model: pyflamegpu.ModelDescription) -> pyflamegpu.RunPlanV
     # runs_control.setPropertyUniformDistributionFloat("lerp_float", 1.0, 128.0)
     for pure_stategy in [0, 1]:
         for cost_of_living in [0, 0.1, 1, 5, 10]:
-            runs_control.setOutputSubdirectory("pure%g_env_cost%g"%(pure_stategy, cost_of_living))
+            runs_control.setOutputSubdirectory("pure%g_env_cost%g_%g_steps"%(pure_stategy, cost_of_living, MULTI_RUN_STEPS))
             runs_control.setPropertyUInt8("strategy_pure", pure_stategy)
             runs_control.setPropertyFloat("cost_of_living", cost_of_living)
-            runs_control.setPropertyFloat("travel_cost", cost_of_living)
+            runs_control.setPropertyFloat("travel_cost", cost_of_living / 2)
             runs += runs_control
     return runs
 
@@ -2199,11 +2199,6 @@ def main():
     main_layer7: pyflamegpu.LayerDescription = model.newLayer()
     main_layer7.addAgentFunction(agent_environmental_punishment_fn)
 
-    # plan: pyflamegpu.RunPlan = pyflamegpu.RunPlan(model)
-    # if RANDOM_SEED:
-    #     plan.setRandomSimulationSeed(RANDOM_SEED)
-    # plan.setSteps(STEP_COUNT)
-
     if not MULTI_RUN:
         print("Configuring simulation...")
         simulation = configure_simulation_single(model, sys.argv)
@@ -2228,8 +2223,6 @@ def main():
         runs = configure_runplan(model)
         print("Running simulation...")
         ensemble.simulate(runs)
-    
-
 
 if __name__ == "__main__":
     main()
