@@ -1310,10 +1310,10 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME}, flamegpu::Messa
                     child_strat = child_strat_other;
                 }}
             }}
-            FLAMEGPU->agent_out.setVariable<uint8_t>("agent_strategy_id", (child_strat_my * 10) + child_strat_other);
-            FLAMEGPU->agent_out.setVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i, child_strat);
             
+            FLAMEGPU->agent_out.setVariable<uint8_t, {AGENT_TRAIT_COUNT}>("agent_strategies", i, child_strat);
         }}
+        FLAMEGPU->agent_out.setVariable<uint8_t>("agent_strategy_id", (child_strat_my * 10) + child_strat_other);
     }}
 
     FLAMEGPU->agent_out.setVariable<unsigned int>("agent_status", {AGENT_STATUS_NEW_AGENT});
@@ -1762,7 +1762,8 @@ def configure_runplan(model: pyflamegpu.ModelDescription) -> pyflamegpu.RunPlanV
     # Initialise environment property 'lerp_float' with values uniformly distributed between 1 and 128
     # runs_control.setPropertyUniformDistributionFloat("lerp_float", 1.0, 128.0)
     for pure_stategy in [0, 1]:
-        for cost_of_living in [0, 0.1, 1, 5, 10]:
+        # [0, 0.1, 1, 2, 5]
+        for cost_of_living in [0.1, 0.3, 1, 2/3, 1.5, 1.666]:
             runs_control.setOutputSubdirectory("pure%g_env_cost%g_%g_steps"%(pure_stategy, cost_of_living, MULTI_RUN_STEPS))
             runs_control.setPropertyUInt8("strategy_pure", pure_stategy)
             runs_control.setPropertyFloat("cost_of_living", cost_of_living)
