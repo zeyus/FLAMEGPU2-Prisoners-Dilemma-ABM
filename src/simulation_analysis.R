@@ -153,7 +153,6 @@ contingent_strategies <- c(
   "Random contingent (tit-for-tat)"
 )
 
-strategy_other
 
 
 df_agent_strategy <- data.frame(matrix(ncol = 17, nrow = 0))
@@ -161,6 +160,7 @@ df_agent_strategy <- data.frame(matrix(ncol = 17, nrow = 0))
 
 
 data_dir <- "./data"
+
 json_files <- dir(
   path = data_dir,
   pattern = ".*\\.json$",
@@ -236,7 +236,7 @@ df_agent_strategy_long[df_agent_strategy_long$strategy %in% tit_for_tat_strategi
 df_agent_strategy_long[df_agent_strategy_long$strategy %in% random_strategies,]$strategy_type <- "random"
 df_agent_strategy_long$strategy_type <- as.factor(df_agent_strategy_long$strategy_type)
 
-df_agent_strategy_long$strategy_group <- paste(df_agent_strategy_long$strategy_pure, df_agent_strategy_long_summary$strategy_type)
+df_agent_strategy_long$strategy_group <- paste(df_agent_strategy_long$strategy_pure, df_agent_strategy_long$strategy_type)
 df_agent_strategy_long$strategy_group <- as.factor(df_agent_strategy_long$strategy_group)
 
 
@@ -311,6 +311,8 @@ df_agent_strategy_long_summary %>%
   stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.5)
 
 
+
+
 df_agent_strategy_long_summary %>%
   filter(pure_strategy == FALSE & agent_count > 0) %>%
   ggplot(
@@ -321,6 +323,32 @@ df_agent_strategy_long_summary %>%
       group = strategy)) +
   stat_summary(fun = "mean", geom = "line") +
   stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.5)
+
+df_agent_strategy_long_summary %>%
+  filter(pure_strategy == FALSE & agent_count > 0) %>%
+  ggplot(
+    aes(
+      x = environmental_harshness,
+      y = agent_count,
+      color = strategy_type,
+      group = strategy_type)) +
+  stat_summary(fun = "mean", geom = "line") +
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.5)
+
+
+
+skrrtPlot =  df_agent_strategy_long_summary %>%
+  filter(pure_strategy == FALSE & agent_count > 0) %>%
+  ggplot(
+    aes(
+      x = environmental_harshness,
+      y = agent_count,
+      color = strategy,
+      group = strategy)) +
+  stat_summary(fun = "mean", geom = "line") +
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.5);skrrtPlot
+
+
 
 
 df_agent_strategy_long_summary %>%
