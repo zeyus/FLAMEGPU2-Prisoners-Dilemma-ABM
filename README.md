@@ -12,7 +12,7 @@ One of the earlier descriptions of the game interactions:
 
 <img width="326" alt="image" src="https://user-images.githubusercontent.com/75656/184105191-1f7af765-add8-4161-9998-062c39f65c18.png">
 
-Axelrod, R., & Hamilton, W. D. (1981). The Evolution of Cooperation. Science, 211(4489), 1390–1396. https://doi.org/10.1126/science.7466396
+_Figure from Axelrod, R., & Hamilton, W. D. (1981). The Evolution of Cooperation. Science, 211(4489), 1390–1396. (https://doi.org/10.1126/science.7466396)[https://doi.org/10.1126/science.7466396]_
 
 
 In this setup the default payoff matrix for interactions is
