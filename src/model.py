@@ -1,8 +1,8 @@
 ###
 # pyflamegpu Prisoner's Dilemma Agent Based Model
 # @author: @zeyus and @EwBew
-# @date: 2020-08-09
-# @version: v0.0.3
+# @date: 2020-08-11
+# @version: v0.0.4
 ###
 __VERSION__ = "v0.0.4"
 __VERSION_STR__ = f"{__name__} v{__VERSION__}"
