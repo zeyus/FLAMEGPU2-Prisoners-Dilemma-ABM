@@ -48,6 +48,8 @@ Any agents that drop below zero energy die.
 
 ### Prerequisites
 
+- CUDA Capable GPU
+- Windows or Linux (not sure about FLAMEGPU2 mac support, might be possible to compile it)
 - NVIDIA CUDA
 - [pyflamegpu](https://github.com/FLAMEGPU/FLAMEGPU2/releases), either built from source with whichever CUDA version you like, or download a pip wheel that matches your system
 
