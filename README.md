@@ -4,7 +4,7 @@
 
 A 2D ABM simulating executed on the GPU interactions of "games" between agents, specifically the prisoner's dilemma game, in which participants can either cooperate or defect, which has a payoff matrix.
 
-Using (FLAMEGPU2)[https://github.com/FLAMEGPU/FLAMEGPU2], agent counts can go into the millions without a problem, especially on a decent GPU.
+Using [FLAMEGPU2](https://github.com/FLAMEGPU/FLAMEGPU2), agent counts can go into the millions without a problem, especially on a decent GPU.
 
 ## Details
 
@@ -12,7 +12,7 @@ One of the earlier descriptions of the game interactions:
 
 <img width="326" alt="image" src="https://user-images.githubusercontent.com/75656/184105191-1f7af765-add8-4161-9998-062c39f65c18.png">
 
-_Figure from Axelrod, R., & Hamilton, W. D. (1981). The Evolution of Cooperation. Science, 211(4489), 1390–1396. (https://doi.org/10.1126/science.7466396)[https://doi.org/10.1126/science.7466396]_
+_Figure from Axelrod, R., & Hamilton, W. D. (1981). The Evolution of Cooperation. Science, 211(4489), 1390–1396. [https://doi.org/10.1126/science.7466396](https://doi.org/10.1126/science.7466396)_
 
 
 In this setup the default payoff matrix for interactions is
