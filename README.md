@@ -40,11 +40,30 @@ Any agents that drop below zero energy die.
 - Can run in a CUDAEnsemble for a whole suite of simulation runs
 - logging is configured for both single and multi runs, currently it collects the agent counts by their strategies, but it should also not bother doing any counts (for performance) if logging is disabled, which it still does
 
+## Model description
 
 <img width="1238" alt="Prisoner's Dilemma ABM model flow" src="https://user-images.githubusercontent.com/75656/184108979-10fbb3d9-32f0-4610-9941-a67593097527.png">
 
+## Running the simulation
+
+### Prerequisites
+
+- NVIDIA CUDA
+- [pyflamegpu](https://github.com/FLAMEGPU/FLAMEGPU2/releases), either built from source with whichever CUDA version you like, or download a pip wheel that matches your system
+
+### Try it out
+
+from the root directory of the repository run:
+
+`python3 src/model.py`
+
+That's it. Setting and configuration information will be added to this README later, but until then, the first section in `model.py` contains most of the variables you might want to change.
+
+## Screenshot
 
 ![Screenshots from ABM simulation](https://user-images.githubusercontent.com/75656/184108676-8f6821eb-f792-484c-b4a8-ba02de789a1f.png)
+
+## References
 
 ABM concepts for tags/traits adapted from:
 - Hammond, R. A., & Axelrod, R. (2006). Evolution of contingent altruism when cooperation is expensive. Theoretical Population Biology, 69(3), 333–338. https://doi.org/10.1016/j.tpb.2005.12.002
