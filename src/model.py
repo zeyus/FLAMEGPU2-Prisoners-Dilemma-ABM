@@ -4,7 +4,7 @@
 # @date: 2020-08-09
 # @version: v0.0.3
 ###
-__VERSION__ = "v0.0.3"
+__VERSION__ = "v0.0.4"
 __VERSION_STR__ = f"{__name__} v{__VERSION__}"
 # @TODO: update
 # Order of execution is as follows: (outdated...)
