@@ -49,7 +49,7 @@ INIT_AGENT_COUNT: int = int(MAX_AGENT_SPACES * 0.16)
 AGENT_HARD_LIMIT: int = int(MAX_AGENT_SPACES * 0.5)
 
 # how long to run the sim for
-STEP_COUNT: int = 100
+STEP_COUNT: int = 10000
 # TODO: logging / Debugging
 WRITE_LOG: bool = True
 LOG_FILE: str = f"data/{strftime('%Y-%m-%d %H-%M-%S')}_{RANDOM_SEED}.json"
@@ -75,7 +75,7 @@ VISUALISATION_ORIENT_AGENTS: bool = False
 MAX_PLAY_DISTANCE: int = 1
 
 # Energy cost per step
-COST_OF_LIVING: float = 10.0
+COST_OF_LIVING: float = 1.0
 
 # Reproduce if energy is above this threshold
 REPRODUCE_MIN_ENERGY: float = 100.0
@@ -164,7 +164,7 @@ AGENT_STRATEGY_PER_TRAIT: bool = False
 AGENT_TRAIT_MUTATION_RATE: float = 0.0
 
 
-MULTI_RUN = True
+MULTI_RUN = False
 MULTI_RUN_STEPS = 10000
 MULTI_RUN_COUNT = 1
 

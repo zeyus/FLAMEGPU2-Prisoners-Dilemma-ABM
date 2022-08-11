@@ -203,7 +203,7 @@ rm(json_files)
 colnames(df_agent_strategy) <- strategy_col_names_df
 
 df_agent_strategy_long <- df_agent_strategy %>% pivot_longer(
-  strategy_col_names,
+  all_of(strategy_col_names),
   names_to = "strategy",
   values_to = "agent_count"
 )
@@ -261,6 +261,82 @@ df_agent_strategy_long_summary <- df_agent_strategy_long %>%
   slice_max(n = 1, step_index) %>%
   ungroup()
 
+head(df_agent_strategy_long_summary)
+df_counts_mean_sd_by_strat <- df_agent_strategy_long_summary %>%
+  group_by(pure_strategy, cost_of_living, strategy) %>%
+  summarise(
+    n = n(),
+    agent_count_mean = mean(agent_count),
+    agent_count_sd = sd(agent_count),
+    pure_strategy = first(pure_strategy),
+    cost_of_living = first(cost_of_living),
+    strategy = first(strategy),
+    .groups = "drop"
+)
+
+selected_env_h <- c(
+  0.0000000,
+  0.1000000,
+  0.6666667,
+  1.0000000,
+  1.6660000
+)
+
+selected_env_h + selected_env_h / 2
+
+df_counts_mean_sd_by_strat <- df_counts_mean_sd_by_strat[
+  round(df_counts_mean_sd_by_strat$cost_of_living,2) %in%
+    round(selected_env_h,2),
+]
+df_counts_mean_sd_by_strat %>% group_by(pure_strategy, cost_of_living, n) %>%
+  arrange(desc(n)) %>%
+  summarise(pure_strategy = first(pure_strategy),
+  cost_of_living = first(cost_of_living), n = first(n))
+
+pure_model_summary <- df_counts_mean_sd_by_strat[
+  df_counts_mean_sd_by_strat$pure_strategy == TRUE &
+  df_counts_mean_sd_by_strat$strategy %in% pure_strategies,]
+
+
+contingent_model_summary <- df_counts_mean_sd_by_strat[
+  df_counts_mean_sd_by_strat$pure_strategy == FALSE,]
+contingent_model_summary  %>% group_by(pure_strategy, cost_of_living, n) %>%
+  arrange(desc(n)) %>%
+  summarise(pure_strategy = first(pure_strategy),
+  cost_of_living = first(cost_of_living), n = first(n))
+
+contingent_model_summary$bullshit <- NA
+contingent_model_summary$bullshit <- paste0(
+    round(contingent_model_summary$agent_count_mean * 10**-4, 2),
+    "+/-",
+    round(contingent_model_summary$agent_count_sd * 10**-4, 2))
+contingent_model_summary
+contingent_model_summary %>% 
+  arrange(cost_of_living, strategy) %>%
+  select(cost_of_living, strategy, bullshit) %>%
+  reshape2::dcast(formula=strategy ~ cost_of_living, value.var="bullshit")
+
+
+
+  reshape(idvar = "strategy", timevar = "cost_of_living", direction = "wide", v.names = c("bullshit"))
+
+
+
+pure_model_summary %>% mutate(
+  agent_count_mean = round(agent_count_mean * 10**-4, 2),
+  agent_count_sd = round(agent_count_sd * 10**-4, 2)) %>%
+  arrange(cost_of_living, strategy)
+
+
+unique(df_counts_mean_sd_by_strat[
+  df_counts_mean_sd_by_strat$pure_strategy == TRUE,]$cost_of_living)
+
+unique(df_counts_mean_sd_by_strat[
+  df_counts_mean_sd_by_strat$pure_strategy == TRUE,]$cost_of_living)
+
+  df_counts_mean_sd_by_strat[
+  df_counts_mean_sd_by_strat$pure_strategy == FALSE,]
+
 
 df_agent_strategy_long_summary <-
   arrange(df_agent_strategy_long_summary, cost_of_living)
@@ -299,6 +375,8 @@ head(df_agent_strategy_long_summary)
 unique(df_agent_strategy_long_summary$environmental_harshness)
 max(df_agent_strategy_long_summary$cost_of_living)
 
+
+# Pure strategy, different environmental 
 df_agent_strategy_long_summary %>%
   filter(pure_strategy == TRUE & agent_count > 0) %>%
   ggplot(
@@ -311,8 +389,6 @@ df_agent_strategy_long_summary %>%
   stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.5)
 
 
-
-
 df_agent_strategy_long_summary %>%
   filter(pure_strategy == FALSE & agent_count > 0) %>%
   ggplot(
@@ -323,6 +399,7 @@ df_agent_strategy_long_summary %>%
       group = strategy)) +
   stat_summary(fun = "mean", geom = "line") +
   stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.5)
+
 
 df_agent_strategy_long_summary %>%
   filter(pure_strategy == FALSE & agent_count > 0) %>%
@@ -333,20 +410,575 @@ df_agent_strategy_long_summary %>%
       color = strategy_type,
       group = strategy_type)) +
   stat_summary(fun = "mean", geom = "line") +
-  stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.5)
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.5, position = "dodge")
 
 
+view(df_agent_strategy_long_summary)
 
-skrrtPlot =  df_agent_strategy_long_summary %>%
-  filter(pure_strategy == FALSE & agent_count > 0) %>%
+df_agent_strategy_long_summary %>%
+  filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>%
   ggplot(
     aes(
       x = environmental_harshness,
       y = agent_count,
-      color = strategy,
-      group = strategy)) +
+      color = strategy_type_other,
+      group = strategy_type_other)) +
   stat_summary(fun = "mean", geom = "line") +
-  stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.5);skrrtPlot
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.5, position = "dodge")
+
+# Copy of above, but changed
+df_agent_strategy_long_summary %>%
+  filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>%
+  ggplot(
+    aes(
+      x = environmental_harshness,
+      y = agent_count,
+      color = strategy_type_other,
+      group = strategy_type_other,
+      fill = strategy_type_other )) +
+  geom_col(position = "dodge")
+  geom_bar(position = "dodge")
+  
+  df_agent_strategy_long_summary %>%
+    filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>%
+    ggplot(
+      aes(
+        x = environmental_harshness, 
+        y = agent_count,
+        color = strategy_type_other,
+        group = strategy_type_other,
+        fill = strategy_type_other )) +
+    geom_col(position = "dodge")
+  geom_bar(position = "dodge")
+  
+  
+  df_agent_strategy_long_summary %>%
+    filter(pure_strategy == FALSE & environmental_harshness ==0) %>% 
+    group_by(strategy_type_other) %>% 
+    summarise(n())
+  
+  
+## Proportional strategies, pure strategy
+  
+  fisken = df_agent_strategy_long_summary %>%
+    filter(pure_strategy == TRUE & agent_count > 0) %>% 
+    filter(environmental_harshness==0)
+  
+  
+  fiskenC = fisken %>% filter(strategy_type_other=="co-op")
+  fiskenD = fisken %>% filter(strategy_type_other=="defect")
+  fiskenT = fisken %>% filter(strategy_type_other=="tit-for-tat")
+  fiskenR = fisken %>% filter(strategy_type_other=="random")
+  
+  sum(fiskenC$agent_count)/sum(fisken$agent_count)
+  sum(fiskenD$agent_count)/sum(fisken$agent_count)
+  sum(fiskenT$agent_count)/sum(fisken$agent_count)
+  sum(fiskenR$agent_count)/sum(fisken$agent_count)
+  
+  env_0 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+            sum(fiskenD$agent_count)/sum(fisken$agent_count),
+            sum(fiskenT$agent_count)/sum(fisken$agent_count),
+            sum(fiskenR$agent_count)/sum(fisken$agent_count))
+  
+  ##
+  
+  fisken = df_agent_strategy_long_summary %>%
+    filter(pure_strategy == TRUE & agent_count > 0) %>% 
+    filter(environmental_harshness==0.15)
+  
+  fiskenC = fisken %>% filter(strategy_type_other=="co-op")
+  fiskenD = fisken %>% filter(strategy_type_other=="defect")
+  fiskenT = fisken %>% filter(strategy_type_other=="tit-for-tat")
+  fiskenR = fisken %>% filter(strategy_type_other=="random")
+  
+  sum(fiskenC$agent_count)/sum(fisken$agent_count)
+  sum(fiskenD$agent_count)/sum(fisken$agent_count)
+  sum(fiskenT$agent_count)/sum(fisken$agent_count)
+  sum(fiskenR$agent_count)/sum(fisken$agent_count)
+  
+  env_0_15 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+               sum(fiskenD$agent_count)/sum(fisken$agent_count),
+               sum(fiskenT$agent_count)/sum(fisken$agent_count),
+               sum(fiskenR$agent_count)/sum(fisken$agent_count))
+  
+  ##
+  fisken = df_agent_strategy_long_summary %>%
+    filter(pure_strategy == TRUE & agent_count > 0) %>% 
+    filter(environmental_harshness==0.45)
+  
+  fiskenC = fisken %>% filter(strategy_type_other=="co-op")
+  fiskenD = fisken %>% filter(strategy_type_other=="defect")
+  fiskenT = fisken %>% filter(strategy_type_other=="tit-for-tat")
+  fiskenR = fisken %>% filter(strategy_type_other=="random")
+  
+  sum(fiskenC$agent_count)/sum(fisken$agent_count)
+  sum(fiskenD$agent_count)/sum(fisken$agent_count)
+  sum(fiskenT$agent_count)/sum(fisken$agent_count)
+  sum(fiskenR$agent_count)/sum(fisken$agent_count)
+  
+  env_0_45 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+               sum(fiskenD$agent_count)/sum(fisken$agent_count),
+               sum(fiskenT$agent_count)/sum(fisken$agent_count),
+               sum(fiskenR$agent_count)/sum(fisken$agent_count))
+  
+  ##
+  
+  fisken = df_agent_strategy_long_summary %>%
+    filter(pure_strategy == TRUE & agent_count > 0) %>% 
+    filter(environmental_harshness==1)
+  
+  fiskenC = fisken %>% filter(strategy_type_other=="co-op")
+  fiskenD = fisken %>% filter(strategy_type_other=="defect")
+  fiskenT = fisken %>% filter(strategy_type_other=="tit-for-tat")
+  fiskenR = fisken %>% filter(strategy_type_other=="random")
+  
+  sum(fiskenC$agent_count)/sum(fisken$agent_count)
+  sum(fiskenD$agent_count)/sum(fisken$agent_count)
+  sum(fiskenT$agent_count)/sum(fisken$agent_count)
+  sum(fiskenR$agent_count)/sum(fisken$agent_count)
+  
+  env_1 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+            sum(fiskenD$agent_count)/sum(fisken$agent_count),
+            sum(fiskenT$agent_count)/sum(fisken$agent_count),
+            sum(fiskenR$agent_count)/sum(fisken$agent_count))
+  
+  
+  ##
+  
+  fisken = df_agent_strategy_long_summary %>%
+    filter(pure_strategy == TRUE & agent_count > 0) %>% 
+    filter(environmental_harshness==1.5)
+  
+  fiskenC = fisken %>% filter(strategy_type_other=="co-op")
+  fiskenD = fisken %>% filter(strategy_type_other=="defect")
+  fiskenT = fisken %>% filter(strategy_type_other=="tit-for-tat")
+  fiskenR = fisken %>% filter(strategy_type_other=="random")
+  
+  sum(fiskenC$agent_count)/sum(fisken$agent_count)
+  sum(fiskenD$agent_count)/sum(fisken$agent_count)
+  sum(fiskenT$agent_count)/sum(fisken$agent_count)
+  sum(fiskenR$agent_count)/sum(fisken$agent_count)
+  
+  env_1_5 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+              sum(fiskenD$agent_count)/sum(fisken$agent_count),
+              sum(fiskenT$agent_count)/sum(fisken$agent_count),
+              sum(fiskenR$agent_count)/sum(fisken$agent_count))
+  
+  ##
+  
+  fisken = df_agent_strategy_long_summary %>%
+    filter(pure_strategy == TRUE & agent_count > 0) %>% 
+    filter(environmental_harshness==2)
+  
+  fiskenC = fisken %>% filter(strategy_type_other=="co-op")
+  fiskenD = fisken %>% filter(strategy_type_other=="defect")
+  fiskenT = fisken %>% filter(strategy_type_other=="tit-for-tat")
+  fiskenR = fisken %>% filter(strategy_type_other=="random")
+  
+  sum(fiskenC$agent_count)/sum(fisken$agent_count)
+  sum(fiskenD$agent_count)/sum(fisken$agent_count)
+  sum(fiskenT$agent_count)/sum(fisken$agent_count)
+  sum(fiskenR$agent_count)/sum(fisken$agent_count)
+  
+  env_2 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+            sum(fiskenD$agent_count)/sum(fisken$agent_count),
+            sum(fiskenT$agent_count)/sum(fisken$agent_count),
+            sum(fiskenR$agent_count)/sum(fisken$agent_count))
+  
+  ##
+  
+  
+  prop_0 = cbind(env_0,rep("0",4),c("co-op","defect","tit-for-tat","random"))
+  prop_0_15 = cbind(env_0_15,rep("0.15",4),c("co-op","defect","tit-for-tat","random"))
+  prop_0_45 = cbind(env_0_45,rep("0.45",4),c("co-op","defect","tit-for-tat","random"))
+  prop_1 = cbind(env_1,rep("1",4),c("co-op","defect","tit-for-tat","random"))
+  prop_1_5 = cbind(env_1_5,rep("1.5",4),c("co-op","defect","tit-for-tat","random"))
+  prop_2 = cbind(env_2,rep("2",4),c("co-op","defect","tit-for-tat","random"))
+  # prop_3 = cbind(env_3,rep("3",4),c("co-op","defect","tit-for-tat","random"))
+  
+  skrrt_prop = as.data.frame(rbind(prop_0,prop_0_15, prop_0_45, prop_1, prop_1_5,prop_2))
+  
+  skrrt_prop[,1] = as.numeric(skrrt_prop[,1])
+  
+  skrrt_prop = rename(skrrt_prop, Strategy_type = V3, Environment_cost = V2,Proportion_strategy = env_0)
+  
+  skrrt_prop %>%
+    ggplot(
+      aes(
+        x = Environment_cost,
+        y = Proportion_strategy,
+        color = Strategy_type,
+        group = Strategy_type,
+        fill = Strategy_type )) +
+    geom_col(position = "dodge")
+  
+  
+  
+  
+  
+  
+  ## Making proportional graphs of the strategies
+  
+  ## Start for strategy type
+  
+ fisken = df_agent_strategy_long_summary %>%
+    filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>% 
+   filter(environmental_harshness==0)
+ 
+ fiskenC = fisken %>% filter(strategy_type=="co-op")
+ fiskenD = fisken %>% filter(strategy_type=="defect")
+ fiskenT = fisken %>% filter(strategy_type=="tit-for-tat")
+ fiskenR = fisken %>% filter(strategy_type=="random")
+ 
+ sum(fiskenC$agent_count)/sum(fisken$agent_count)
+ sum(fiskenD$agent_count)/sum(fisken$agent_count)
+ sum(fiskenT$agent_count)/sum(fisken$agent_count)
+ sum(fiskenR$agent_count)/sum(fisken$agent_count)
+ 
+ env_0 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+    sum(fiskenD$agent_count)/sum(fisken$agent_count),
+    sum(fiskenT$agent_count)/sum(fisken$agent_count),
+    sum(fiskenR$agent_count)/sum(fisken$agent_count))
+ 
+ ##
+ 
+fisken = df_agent_strategy_long_summary %>%
+   filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>% 
+   filter(environmental_harshness==0.15)
+ 
+ fiskenC = fisken %>% filter(strategy_type=="co-op")
+ fiskenD = fisken %>% filter(strategy_type=="defect")
+ fiskenT = fisken %>% filter(strategy_type=="tit-for-tat")
+ fiskenR = fisken %>% filter(strategy_type=="random")
+ 
+ sum(fiskenC$agent_count)/sum(fisken$agent_count)
+ sum(fiskenD$agent_count)/sum(fisken$agent_count)
+ sum(fiskenT$agent_count)/sum(fisken$agent_count)
+ sum(fiskenR$agent_count)/sum(fisken$agent_count)
+ 
+ env_0_15 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+           sum(fiskenD$agent_count)/sum(fisken$agent_count),
+           sum(fiskenT$agent_count)/sum(fisken$agent_count),
+           sum(fiskenR$agent_count)/sum(fisken$agent_count))
+ 
+ ##
+ fisken = df_agent_strategy_long_summary %>%
+   filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>% 
+   filter(environmental_harshness==0.45)
+ 
+ fiskenC = fisken %>% filter(strategy_type=="co-op")
+ fiskenD = fisken %>% filter(strategy_type=="defect")
+ fiskenT = fisken %>% filter(strategy_type=="tit-for-tat")
+ fiskenR = fisken %>% filter(strategy_type=="random")
+ 
+ sum(fiskenC$agent_count)/sum(fisken$agent_count)
+ sum(fiskenD$agent_count)/sum(fisken$agent_count)
+ sum(fiskenT$agent_count)/sum(fisken$agent_count)
+ sum(fiskenR$agent_count)/sum(fisken$agent_count)
+ 
+ env_0_45 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+              sum(fiskenD$agent_count)/sum(fisken$agent_count),
+              sum(fiskenT$agent_count)/sum(fisken$agent_count),
+              sum(fiskenR$agent_count)/sum(fisken$agent_count))
+ 
+##
+ 
+ fisken = df_agent_strategy_long_summary %>%
+   filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>% 
+   filter(environmental_harshness==1)
+ 
+ fiskenC = fisken %>% filter(strategy_type=="co-op")
+ fiskenD = fisken %>% filter(strategy_type=="defect")
+ fiskenT = fisken %>% filter(strategy_type=="tit-for-tat")
+ fiskenR = fisken %>% filter(strategy_type=="random")
+ 
+ sum(fiskenC$agent_count)/sum(fisken$agent_count)
+ sum(fiskenD$agent_count)/sum(fisken$agent_count)
+ sum(fiskenT$agent_count)/sum(fisken$agent_count)
+ sum(fiskenR$agent_count)/sum(fisken$agent_count)
+ 
+ env_1 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+              sum(fiskenD$agent_count)/sum(fisken$agent_count),
+              sum(fiskenT$agent_count)/sum(fisken$agent_count),
+              sum(fiskenR$agent_count)/sum(fisken$agent_count))
+ 
+ 
+ ##
+ 
+ fisken = df_agent_strategy_long_summary %>%
+   filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>% 
+   filter(environmental_harshness==1.5)
+ 
+ fiskenC = fisken %>% filter(strategy_type=="co-op")
+ fiskenD = fisken %>% filter(strategy_type=="defect")
+ fiskenT = fisken %>% filter(strategy_type=="tit-for-tat")
+ fiskenR = fisken %>% filter(strategy_type=="random")
+ 
+ sum(fiskenC$agent_count)/sum(fisken$agent_count)
+ sum(fiskenD$agent_count)/sum(fisken$agent_count)
+ sum(fiskenT$agent_count)/sum(fisken$agent_count)
+ sum(fiskenR$agent_count)/sum(fisken$agent_count)
+ 
+ env_1_5 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+           sum(fiskenD$agent_count)/sum(fisken$agent_count),
+           sum(fiskenT$agent_count)/sum(fisken$agent_count),
+           sum(fiskenR$agent_count)/sum(fisken$agent_count))
+ 
+ ##
+ 
+ fisken = df_agent_strategy_long_summary %>%
+   filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>% 
+   filter(environmental_harshness==2)
+ 
+ fiskenC = fisken %>% filter(strategy_type=="co-op")
+ fiskenD = fisken %>% filter(strategy_type=="defect")
+ fiskenT = fisken %>% filter(strategy_type=="tit-for-tat")
+ fiskenR = fisken %>% filter(strategy_type=="random")
+ 
+ sum(fiskenC$agent_count)/sum(fisken$agent_count)
+ sum(fiskenD$agent_count)/sum(fisken$agent_count)
+ sum(fiskenT$agent_count)/sum(fisken$agent_count)
+ sum(fiskenR$agent_count)/sum(fisken$agent_count)
+ 
+ env_2 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+             sum(fiskenD$agent_count)/sum(fisken$agent_count),
+             sum(fiskenT$agent_count)/sum(fisken$agent_count),
+             sum(fiskenR$agent_count)/sum(fisken$agent_count))
+ 
+ ##
+
+ 
+ prop_0 = cbind(env_0,rep("0",4),c("co-op","defect","tit-for-tat","random"))
+ prop_0_15 = cbind(env_0_15,rep("0.15",4),c("co-op","defect","tit-for-tat","random"))
+ prop_0_45 = cbind(env_0_45,rep("0.45",4),c("co-op","defect","tit-for-tat","random"))
+ prop_1 = cbind(env_1,rep("1",4),c("co-op","defect","tit-for-tat","random"))
+ prop_1_5 = cbind(env_1_5,rep("1.5",4),c("co-op","defect","tit-for-tat","random"))
+ prop_2 = cbind(env_2,rep("2",4),c("co-op","defect","tit-for-tat","random"))
+ # prop_3 = cbind(env_3,rep("3",4),c("co-op","defect","tit-for-tat","random"))
+ 
+ skrrt_prop = as.data.frame(rbind(prop_0,prop_0_15, prop_0_45, prop_1, prop_1_5,prop_2))
+ 
+ skrrt_prop[,1] = as.numeric(skrrt_prop[,1])
+ 
+ skrrt_prop = rename(skrrt_prop, Strategy_type = V3, Environment_cost = V2,Proportion_strategy = env_0)
+ 
+skrrt_prop %>%
+   ggplot(
+     aes(
+       x = Environment_cost,
+       y = Proportion_strategy,
+       color = Strategy_type,
+       group = Strategy_type,
+       fill = Strategy_type )) +
+   geom_col(position = "dodge")
+
+
+
+
+
+## Start Strategy_type_other
+
+fisken = df_agent_strategy_long_summary %>%
+  filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>% 
+  filter(environmental_harshness==0)
+
+
+fiskenC = fisken %>% filter(strategy_type_other=="co-op")
+fiskenD = fisken %>% filter(strategy_type_other=="defect")
+fiskenT = fisken %>% filter(strategy_type_other=="tit-for-tat")
+fiskenR = fisken %>% filter(strategy_type_other=="random")
+
+sum(fiskenC$agent_count)/sum(fisken$agent_count)
+sum(fiskenD$agent_count)/sum(fisken$agent_count)
+sum(fiskenT$agent_count)/sum(fisken$agent_count)
+sum(fiskenR$agent_count)/sum(fisken$agent_count)
+
+env_0 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+          sum(fiskenD$agent_count)/sum(fisken$agent_count),
+          sum(fiskenT$agent_count)/sum(fisken$agent_count),
+          sum(fiskenR$agent_count)/sum(fisken$agent_count))
+
+##
+
+fisken = df_agent_strategy_long_summary %>%
+  filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>% 
+  filter(environmental_harshness==0.15)
+
+fiskenC = fisken %>% filter(strategy_type_other=="co-op")
+fiskenD = fisken %>% filter(strategy_type_other=="defect")
+fiskenT = fisken %>% filter(strategy_type_other=="tit-for-tat")
+fiskenR = fisken %>% filter(strategy_type_other=="random")
+
+sum(fiskenC$agent_count)/sum(fisken$agent_count)
+sum(fiskenD$agent_count)/sum(fisken$agent_count)
+sum(fiskenT$agent_count)/sum(fisken$agent_count)
+sum(fiskenR$agent_count)/sum(fisken$agent_count)
+
+env_0_15 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+             sum(fiskenD$agent_count)/sum(fisken$agent_count),
+             sum(fiskenT$agent_count)/sum(fisken$agent_count),
+             sum(fiskenR$agent_count)/sum(fisken$agent_count))
+
+##
+fisken = df_agent_strategy_long_summary %>%
+  filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>% 
+  filter(environmental_harshness==0.45)
+
+fiskenC = fisken %>% filter(strategy_type_other=="co-op")
+fiskenD = fisken %>% filter(strategy_type_other=="defect")
+fiskenT = fisken %>% filter(strategy_type_other=="tit-for-tat")
+fiskenR = fisken %>% filter(strategy_type_other=="random")
+
+sum(fiskenC$agent_count)/sum(fisken$agent_count)
+sum(fiskenD$agent_count)/sum(fisken$agent_count)
+sum(fiskenT$agent_count)/sum(fisken$agent_count)
+sum(fiskenR$agent_count)/sum(fisken$agent_count)
+
+env_0_45 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+             sum(fiskenD$agent_count)/sum(fisken$agent_count),
+             sum(fiskenT$agent_count)/sum(fisken$agent_count),
+             sum(fiskenR$agent_count)/sum(fisken$agent_count))
+
+##
+
+fisken = df_agent_strategy_long_summary %>%
+  filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>% 
+  filter(environmental_harshness==1)
+
+fiskenC = fisken %>% filter(strategy_type_other=="co-op")
+fiskenD = fisken %>% filter(strategy_type_other=="defect")
+fiskenT = fisken %>% filter(strategy_type_other=="tit-for-tat")
+fiskenR = fisken %>% filter(strategy_type_other=="random")
+
+sum(fiskenC$agent_count)/sum(fisken$agent_count)
+sum(fiskenD$agent_count)/sum(fisken$agent_count)
+sum(fiskenT$agent_count)/sum(fisken$agent_count)
+sum(fiskenR$agent_count)/sum(fisken$agent_count)
+
+env_1 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+          sum(fiskenD$agent_count)/sum(fisken$agent_count),
+          sum(fiskenT$agent_count)/sum(fisken$agent_count),
+          sum(fiskenR$agent_count)/sum(fisken$agent_count))
+
+
+##
+
+fisken = df_agent_strategy_long_summary %>%
+  filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>% 
+  filter(environmental_harshness==1.5)
+
+fiskenC = fisken %>% filter(strategy_type_other=="co-op")
+fiskenD = fisken %>% filter(strategy_type_other=="defect")
+fiskenT = fisken %>% filter(strategy_type_other=="tit-for-tat")
+fiskenR = fisken %>% filter(strategy_type_other=="random")
+
+sum(fiskenC$agent_count)/sum(fisken$agent_count)
+sum(fiskenD$agent_count)/sum(fisken$agent_count)
+sum(fiskenT$agent_count)/sum(fisken$agent_count)
+sum(fiskenR$agent_count)/sum(fisken$agent_count)
+
+env_1_5 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+            sum(fiskenD$agent_count)/sum(fisken$agent_count),
+            sum(fiskenT$agent_count)/sum(fisken$agent_count),
+            sum(fiskenR$agent_count)/sum(fisken$agent_count))
+
+##
+
+fisken = df_agent_strategy_long_summary %>%
+  filter(pure_strategy == FALSE & environmental_harshness !=7.5) %>% 
+  filter(environmental_harshness==2)
+
+fiskenC = fisken %>% filter(strategy_type_other=="co-op")
+fiskenD = fisken %>% filter(strategy_type_other=="defect")
+fiskenT = fisken %>% filter(strategy_type_other=="tit-for-tat")
+fiskenR = fisken %>% filter(strategy_type_other=="random")
+
+sum(fiskenC$agent_count)/sum(fisken$agent_count)
+sum(fiskenD$agent_count)/sum(fisken$agent_count)
+sum(fiskenT$agent_count)/sum(fisken$agent_count)
+sum(fiskenR$agent_count)/sum(fisken$agent_count)
+
+env_2 = c(sum(fiskenC$agent_count)/sum(fisken$agent_count),
+          sum(fiskenD$agent_count)/sum(fisken$agent_count),
+          sum(fiskenT$agent_count)/sum(fisken$agent_count),
+          sum(fiskenR$agent_count)/sum(fisken$agent_count))
+
+##
+
+
+prop_0 = cbind(env_0,rep("0",4),c("co-op","defect","tit-for-tat","random"))
+prop_0_15 = cbind(env_0_15,rep("0.15",4),c("co-op","defect","tit-for-tat","random"))
+prop_0_45 = cbind(env_0_45,rep("0.45",4),c("co-op","defect","tit-for-tat","random"))
+prop_1 = cbind(env_1,rep("1",4),c("co-op","defect","tit-for-tat","random"))
+prop_1_5 = cbind(env_1_5,rep("1.5",4),c("co-op","defect","tit-for-tat","random"))
+prop_2 = cbind(env_2,rep("2",4),c("co-op","defect","tit-for-tat","random"))
+# prop_3 = cbind(env_3,rep("3",4),c("co-op","defect","tit-for-tat","random"))
+
+skrrt_prop = as.data.frame(rbind(prop_0,prop_0_15, prop_0_45, prop_1, prop_1_5,prop_2))
+
+skrrt_prop[,1] = as.numeric(skrrt_prop[,1])
+
+skrrt_prop = rename(skrrt_prop, Strategy_type = V3, Environment_cost = V2,Proportion_strategy = env_0)
+
+skrrt_prop %>%
+  ggplot(
+    aes(
+      x = Environment_cost,
+      y = Proportion_strategy,
+      color = Strategy_type,
+      group = Strategy_type,
+      fill = Strategy_type )) +
+  geom_col(position = "dodge")
+
+
+
+
+
+
+ 
+ 
+ 
+ 
+ class(fisken$agent_count)
+ 
+ sum(fiskenC$agent_count)
+ 
+ 
+ 
+ view(fisken)
+ 
+ %>% 
+   filter(strategy_type)
+ 
+ 
+ 
+   
+    group_by(environmental_harshness) %>% 
+    group_by(strategy_type,agent_count) %>% sum(agent_count)
+   
+   
+   count()
+   
+   
+    summarise()
+  
+  
+  
+  
+  
+  view(agent_count)
+  
+  view(df_agent_strategy_long_summary$agent_count)
+  view(df_agent_strategy_long)
+  
+df_agent_strategy_long_summary
+  
+  
+  
+  
+  stat_summary(fun = "mean", geom = "line") +
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.5)
+
 
 
 
