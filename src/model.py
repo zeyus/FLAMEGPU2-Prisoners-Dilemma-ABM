@@ -36,7 +36,7 @@ import math
 ##########################################
 
 # Define some constants
-RANDOM_SEED: int = random.randint(0, 2 ** 32 / 2 - 1)
+RANDOM_SEED: int = random.randint(0, 2**32 / 2 - 1)
 
 # upper agent limit ... please make it a square number for sanity
 # this is essentially the size of the grid
@@ -49,7 +49,7 @@ INIT_AGENT_COUNT: int = int(MAX_AGENT_SPACES * 0.16)
 AGENT_HARD_LIMIT: int = int(MAX_AGENT_SPACES * 0.5)
 
 # how long to run the sim for
-STEP_COUNT: int = 10000
+STEP_COUNT: int = 100
 # TODO: logging / Debugging
 WRITE_LOG: bool = True
 LOG_FILE: str = f"data/{strftime('%Y-%m-%d %H-%M-%S')}_{RANDOM_SEED}.json"
@@ -66,7 +66,7 @@ USE_VISUALISATION: bool = True and pyflamegpu.VISUALISATION
 # visualisation camera speed
 VISUALISATION_CAMERA_SPEED: float = 0.1
 # pause the simulation at start
-PAUSE_AT_START: bool = True
+PAUSE_AT_START: bool = False
 VISUALISATION_BG_RGB: List[float] = [0.1, 0.1, 0.1]
 
 # should agents rotate to face the direction of their last action?
@@ -128,23 +128,23 @@ AGENT_STRATEGIES: dict = {
     "always_coop": {
         "name": "always_coop",
         "id": AGENT_STRATEGY_COOP,
-        "proportion": 1/4,
+        "proportion": 1 / 4,
     },
     "always_defect": {
         "name": "always_defect",
         "id": AGENT_STRATEGY_DEFECT,
-        "proportion": 1/4,
+        "proportion": 1 / 4,
     },
     # defaults to coop if no previous play recorded
     "tit_for_tat": {
         "name": "tit_for_tat",
         "id": AGENT_STRATEGY_TIT_FOR_TAT,
-        "proportion": 1/4,
+        "proportion": 1 / 4,
     },
     "random": {
-      "name": "random",
-      "id": AGENT_STRATEGY_RANDOM,
-      "proportion": 1/4,
+        "name": "random",
+        "id": AGENT_STRATEGY_RANDOM,
+        "proportion": 1 / 4,
     },
 }
 
@@ -175,15 +175,17 @@ MULTI_RUN_COUNT = 1
 # below this line                        #
 ##########################################
 
+
 # set up logging
-def configure_logging(model: pyflamegpu.ModelDescription) -> pyflamegpu.StepLoggingConfig: 
+def configure_logging(
+    model: pyflamegpu.ModelDescription,
+) -> pyflamegpu.StepLoggingConfig:
     step_log_cfg = pyflamegpu.StepLoggingConfig(model)
     step_log_cfg.setFrequency(OUTPUT_EVERY_N_STEPS)
     step_log_cfg.agent("prisoner").logCount()
     step_log_cfg.logEnvironment("population_strat_count")
     return step_log_cfg
-    #step_log_cfg
-
+    # step_log_cfg
 
 
 AGENT_RESULT_COOP: int = 0
@@ -213,32 +215,35 @@ BUCKET_SIZE: int = ENV_MAX**2
 
 
 # Generate weights based on strategy configuration
-AGENT_WEIGHTS: List[float] = [AGENT_STRATEGIES[strategy]
-                              ["proportion"] for strategy in AGENT_STRATEGIES]  # type: ignore
+AGENT_WEIGHTS: List[float] = [
+    AGENT_STRATEGIES[strategy]["proportion"] for strategy in AGENT_STRATEGIES
+]  # type: ignore
 # generate strategy IDs based on strategy configuration
 AGENT_STRATEGY_IDS: List[int] = [
-    AGENT_STRATEGIES[strategy]["id"] for strategy in AGENT_STRATEGIES]  # type: ignore
+    AGENT_STRATEGIES[strategy]["id"] for strategy in AGENT_STRATEGIES
+]  # type: ignore
 
 AGENT_STRATEGY_COUNT: int = len(AGENT_STRATEGY_IDS)
 
-POPULATION_COUNT_BINS: int = AGENT_STRATEGY_COUNT ** 2
+POPULATION_COUNT_BINS: int = AGENT_STRATEGY_COUNT**2
 # definie color pallete for each agent strategy, with fallback to white
 AGENT_COLOR_SCHEME: pyflamegpu.uDiscreteColor = pyflamegpu.uDiscreteColor(
-    "agent_color", pyflamegpu.SET1, pyflamegpu.WHITE)
-AGENT_DEFAULT_SHAPE: str = './src/resources/models/primitive_pyramid_arrow.obj'
+    "agent_color", pyflamegpu.SET1, pyflamegpu.WHITE
+)
+AGENT_DEFAULT_SHAPE: str = "./src/resources/models/primitive_pyramid_arrow.obj"
 AGENT_DEFAULT_SCALE: float = 0.9
 
 ROLL_INCREMENT: float = math.pi / 4
 # RAD ANGLES
 ROLL_RADS: List[float] = [
-  -3 * ROLL_INCREMENT,
-  -4 * ROLL_INCREMENT,
-  3 * ROLL_INCREMENT,
-  -2 * ROLL_INCREMENT,
-  4 * ROLL_INCREMENT, # i know :P
-  -1 * ROLL_INCREMENT,
-  0 * ROLL_INCREMENT,
-  1 * ROLL_INCREMENT,
+    -3 * ROLL_INCREMENT,
+    -4 * ROLL_INCREMENT,
+    3 * ROLL_INCREMENT,
+    -2 * ROLL_INCREMENT,
+    4 * ROLL_INCREMENT,  # i know :P
+    -1 * ROLL_INCREMENT,
+    0 * ROLL_INCREMENT,
+    1 * ROLL_INCREMENT,
 ]
 
 # get max number of surrounding agents within this radius
@@ -253,7 +258,9 @@ CENTER_SPACE: int = SPACES_WITHIN_RADIUS // 2
 
 # if we use visualisation, update agent position and direction.
 CUDA_AGENT_MOVE_UPDATE_VIZ: str = "true" if USE_VISUALISATION else "false"
-CUDA_ORIENT_AGENTS: str = "true" if USE_VISUALISATION and VISUALISATION_ORIENT_AGENTS else "false"
+CUDA_ORIENT_AGENTS: str = (
+    "true" if USE_VISUALISATION and VISUALISATION_ORIENT_AGENTS else "false"
+)
 
 
 CUDA_GET_POP_INDEX_FUNCTION_NAME: str = "get_pop_index"
@@ -265,7 +272,7 @@ FLAMEGPU_HOST_DEVICE_FUNCTION unsigned int {CUDA_GET_POP_INDEX_FUNCTION_NAME}(co
     return strat_my * 4 + strat_other;
 }}
 #endif
-""" 
+"""
 
 
 CUDA_SEQ_TO_ANGLE_FUNCTION_NAME: str = "seq_to_angle"
@@ -282,7 +289,7 @@ FLAMEGPU_HOST_DEVICE_FUNCTION float {CUDA_SEQ_TO_ANGLE_FUNCTION_NAME}(const unsi
     return seq_map[seq % {SPACES_WITHIN_RADIUS}];
 }}
 #endif
-""" # if VISUALISATION_ORIENT_AGENTS else ""
+"""  # if VISUALISATION_ORIENT_AGENTS else ""
 # general function that returns the new position based on the index/sequence of a wrapped moore neighborhood iterator.
 CUDA_POS_FROM_MOORE_SEQ_FUNCTION_NAME: str = "pos_from_moore_seq"
 CUDA_POS_FROM_MOORE_SEQ_FUNCTION: str = rf"""
@@ -334,10 +341,12 @@ FLAMEGPU_HOST_DEVICE_FUNCTION unsigned int {CUDA_POS_TO_BUCKET_ID_FUNCTION_NAME}
 #endif
 """
 
+
 def debug_set_color(index: int = -1) -> str:
-  if index == -1:
-    return ''
-  return f'FLAMEGPU->setVariable<unsigned int>("agent_color", {index});'
+    if index == -1:
+        return ""
+    return f'FLAMEGPU->setVariable<unsigned int>("agent_color", {index});'
+
 
 # agent functions
 CUDA_SEARCH_FUNC_NAME: str = "search_for_neighbours"
@@ -962,7 +971,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_AGENT_NEIGHBOURHOOD_BROADCAST_FUNCTION_NAME}, flam
 }}
 """
 
-# only agents that can reproduce care about their neibours now 
+# only agents that can reproduce care about their neibours now
 CUDA_AGENT_NEIGHBOURHOOD_UPDATE_CONDITION_NAME: str = "neighbourhood_update_condition"
 CUDA_AGENT_NEIGHBOURHOOD_UPDATE_CONDITION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_AGENT_NEIGHBOURHOOD_UPDATE_CONDITION_NAME}) {{
@@ -1331,7 +1340,7 @@ CUDA_ENVIRONMENTAL_PUNISHMENT_CONDITION_NAME: str = "environmental_punishment_co
 CUDA_ENVIRONMENTAL_PUNISHMENT_CONDITION: str = rf"""
 FLAMEGPU_AGENT_FUNCTION_CONDITION({CUDA_ENVIRONMENTAL_PUNISHMENT_CONDITION_NAME}) {{
     const unsigned int max_agents = FLAMEGPU->environment.getProperty<unsigned int>("max_agents");
-    return FLAMEGPU->getVariable<unsigned int>("agent_status") != {AGENT_STATUS_NEW_AGENT} || FLAMEGPU->getThreadIndex() >= max_agents;
+    return FLAMEGPU->getVariable<unsigned int>("agent_status") != {AGENT_STATUS_NEW_AGENT} || FLAMEGPU->getIndex() >= max_agents;
 }}
 """
 CUDA_ENVIRONMENTAL_PUNISHMENT_NAME: str = "environmental_punishment"
@@ -1342,7 +1351,7 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_ENVIRONMENTAL_PUNISHMENT_NAME}, flamegpu::MessageN
     
     // @TODO FUCK THIS CODE OFF
     const unsigned int agent_status = FLAMEGPU->getVariable<unsigned int>("agent_status");
-    if (FLAMEGPU->getThreadIndex() >= max_agents) {{
+    if (FLAMEGPU->getIndex() >= max_agents) {{
         return flamegpu::DEAD;
     }}
     float my_energy = FLAMEGPU->getVariable<float>("energy");
@@ -1365,17 +1374,24 @@ FLAMEGPU_AGENT_FUNCTION({CUDA_ENVIRONMENTAL_PUNISHMENT_NAME}, flamegpu::MessageN
 def _print_prisoner_states(prisoner: pyflamegpu.HostAgentAPI) -> None:
     n_ready: int = prisoner.countUInt("agent_status", AGENT_STATUS_READY)
     n_ready_to_challenge: int = prisoner.countUInt(
-        "agent_status", AGENT_STATUS_READY_TO_CHALLENGE)
+        "agent_status", AGENT_STATUS_READY_TO_CHALLENGE
+    )
     n_ready_to_respond: int = prisoner.countUInt(
-        "agent_status", AGENT_STATUS_READY_TO_RESPOND)
+        "agent_status", AGENT_STATUS_READY_TO_RESPOND
+    )
     n_play_completed: int = prisoner.countUInt(
-        "agent_status", AGENT_STATUS_PLAY_COMPLETED)
+        "agent_status", AGENT_STATUS_PLAY_COMPLETED
+    )
     n_moving: int = prisoner.countUInt("agent_status", AGENT_STATUS_MOVING)
     n_move_unresolved: int = prisoner.countUInt(
-        "agent_status", AGENT_STATUS_MOVEMENT_UNRESOLVED)
+        "agent_status", AGENT_STATUS_MOVEMENT_UNRESOLVED
+    )
     n_move_completed: int = prisoner.countUInt(
-        "agent_status", AGENT_STATUS_MOVEMENT_COMPLETED)
-    print(f"n_ready: {n_ready}, n_ready_to_challenge: {n_ready_to_challenge}, n_ready_to_respond: {n_ready_to_respond} n_play_completed: {n_play_completed}, n_moving: {n_moving}, n_move_unresolved: {n_move_unresolved}, n_move_completed: {n_move_completed}")
+        "agent_status", AGENT_STATUS_MOVEMENT_COMPLETED
+    )
+    print(
+        f"n_ready: {n_ready}, n_ready_to_challenge: {n_ready_to_challenge}, n_ready_to_respond: {n_ready_to_respond} n_play_completed: {n_play_completed}, n_moving: {n_moving}, n_move_unresolved: {n_move_unresolved}, n_move_completed: {n_move_completed}"
+    )
 
 
 def _update_agent_count(FLAMEGPU, prisoner: pyflamegpu.HostAgentAPI) -> int:
@@ -1385,7 +1401,8 @@ def _update_agent_count(FLAMEGPU, prisoner: pyflamegpu.HostAgentAPI) -> int:
     FLAMEGPU.environment.setPropertyUInt8("overpopulated", overpopulated)
     return overpopulated
 
-class step_fn(pyflamegpu.HostFunctionCallback):
+
+class step_fn(pyflamegpu.HostFunction):
     def __init__(self):
         super().__init__()
 
@@ -1396,22 +1413,25 @@ class step_fn(pyflamegpu.HostFunctionCallback):
             for i in range(0, 40, 10):
                 for j in range(0, 4):
                     strat_count = prisoner.countUInt8("agent_strategy_id", i + j)
-                    FLAMEGPU.environment.setPropertyUInt("population_strat_count", k, strat_count)
+                    FLAMEGPU.environment.setPropertyUInt(
+                        "population_strat_count", k, strat_count
+                    )
                     k += 1
-            
-
 
 
 # set up population
-class init_fn(pyflamegpu.HostFunctionCallback):
+class init_fn(pyflamegpu.HostFunction):
     def run(self, FLAMEGPU: pyflamegpu.HostAPI):
-        agent_strat_per_trait = FLAMEGPU.environment.getPropertyUInt8("strategy_per_trait")
+        agent_strat_per_trait = FLAMEGPU.environment.getPropertyUInt8(
+            "strategy_per_trait"
+        )
         agent_strat_pure = FLAMEGPU.environment.getPropertyUInt8("strategy_pure")
 
         # FLAMEGPU.environment.setPropertyUInt("agent_count", INIT_AGENT_COUNT)
         agent: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
         # randomly create starting position for agents
         import numpy as np
+
         if RANDOM_SEED is not None:
             np.random.RandomState(RANDOM_SEED)
         # initialise grid with id for all possible agents
@@ -1436,9 +1456,10 @@ class init_fn(pyflamegpu.HostFunctionCallback):
                 instance.setVariableFloat("y", float(y))
                 if VISUALISATION_ORIENT_AGENTS:
                     instance.setVariableFloat("pitch", 0.0)
-                
-            energy = max(random.normalvariate(INIT_ENERGY_MU,
-                         INIT_ENERGY_SIGMA), INIT_ENERGY_MIN)
+
+            energy = max(
+                random.normalvariate(INIT_ENERGY_MU, INIT_ENERGY_SIGMA), INIT_ENERGY_MIN
+            )
             if MAX_ENERGY > 0.0:
                 energy = min(energy, MAX_ENERGY)
             instance.setVariableFloat("energy", energy)
@@ -1447,20 +1468,26 @@ class init_fn(pyflamegpu.HostFunctionCallback):
             instance.setVariableUInt8("agent_trait", agent_trait)
             # this could be based on strategy, or change during runtime!
             instance.setVariableUInt("agent_color", agent_trait)
-            
+
             # select agent strategy
             if agent_strat_pure == 1:
-                agent_strategies = random.choices(AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=1)*AGENT_TRAIT_COUNT
+                agent_strategies = (
+                    random.choices(AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=1)
+                    * AGENT_TRAIT_COUNT
+                )
             elif agent_strat_per_trait == 1:
                 # if we are using a per-trait strategy, then pick random weighted strategies
-                agent_strategies = random.choices(AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=AGENT_TRAIT_COUNT)
+                agent_strategies = random.choices(
+                    AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=AGENT_TRAIT_COUNT
+                )
             else:
                 # otherwise, we need a strategy for agents with matching traits
                 # and a second for agents with different traits
                 strategy_my: int
                 strategy_other: int
                 strategy_my, strategy_other = random.choices(
-                    AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=2)
+                    AGENT_STRATEGY_IDS, weights=AGENT_WEIGHTS, k=2
+                )
                 agent_strategies: List[int] = []
                 trait: int
                 for i, trait in enumerate(AGENT_TRAITS):
@@ -1468,7 +1495,7 @@ class init_fn(pyflamegpu.HostFunctionCallback):
                         agent_strategies.append(strategy_my)
                     else:
                         agent_strategies.append(strategy_other)
-            instance.setVariableArrayUInt8('agent_strategies', agent_strategies)
+            instance.setVariableArrayUInt8("agent_strategies", agent_strategies)
             strat_my: int = -1
             strat_other: int = -1
             for i, strat in enumerate(agent_strategies):
@@ -1484,16 +1511,20 @@ class init_fn(pyflamegpu.HostFunctionCallback):
             idx = (strat_my * 4) + strat_other
             # print(strat_my, strat_other, idx)
             # print(type(idx))
-            #agent_pop_counts[idx] = int(agent_pop_counts[idx]) + 1
-            instance.setVariableUInt8('agent_strategy_id', strategy_id)
-            
-            strat_count = FLAMEGPU.environment.getPropertyUInt("population_strat_count", idx)
-            FLAMEGPU.environment.setPropertyUInt("population_strat_count", idx, strat_count + 1)
-            
+            # agent_pop_counts[idx] = int(agent_pop_counts[idx]) + 1
+            instance.setVariableUInt8("agent_strategy_id", strategy_id)
+
+            strat_count = FLAMEGPU.environment.getPropertyUInt(
+                "population_strat_count", idx
+            )
+            FLAMEGPU.environment.setPropertyUInt(
+                "population_strat_count", idx, strat_count + 1
+            )
+
         del grid, np
 
 
-class exit_play_fn(pyflamegpu.HostFunctionConditionCallback):
+class exit_play_fn(pyflamegpu.HostCondition):
     iterations: int = 0
     max_iterations: int = SPACES_WITHIN_RADIUS
 
@@ -1507,17 +1538,25 @@ class exit_play_fn(pyflamegpu.HostFunctionConditionCallback):
         if self.iterations < self.max_iterations:
             if VERBOSE_OUTPUT:
                 if FLAMEGPU.getStepCounter() % OUTPUT_EVERY_N_STEPS == 0:
-                    print("ready: ", prisoner.countUInt("agent_status", AGENT_STATUS_READY),
-                          "ready_respond: ", prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_RESPOND))
-            #print(prisoner.countUInt("agent_status", AGENT_STATUS_SKIP_RESPONSE))
-            if prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_CHALLENGE) or prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_RESPOND):
+                    print(
+                        "ready: ",
+                        prisoner.countUInt("agent_status", AGENT_STATUS_READY),
+                        "ready_respond: ",
+                        prisoner.countUInt(
+                            "agent_status", AGENT_STATUS_READY_TO_RESPOND
+                        ),
+                    )
+            # print(prisoner.countUInt("agent_status", AGENT_STATUS_SKIP_RESPONSE))
+            if prisoner.countUInt(
+                "agent_status", AGENT_STATUS_READY_TO_CHALLENGE
+            ) or prisoner.countUInt("agent_status", AGENT_STATUS_READY_TO_RESPOND):
                 return pyflamegpu.CONTINUE
         self.iterations = 0
         _update_agent_count(FLAMEGPU, prisoner)
         return pyflamegpu.EXIT
 
 
-class exit_move_fn(pyflamegpu.HostFunctionConditionCallback):
+class exit_move_fn(pyflamegpu.HostCondition):
     iterations: int = 0
     max_iterations: int = SPACES_WITHIN_RADIUS
 
@@ -1536,7 +1575,8 @@ class exit_move_fn(pyflamegpu.HostFunctionConditionCallback):
         self.iterations = 0
         return pyflamegpu.EXIT
 
-class exit_condition_fn(pyflamegpu.HostFunctionConditionCallback):
+
+class exit_condition_fn(pyflamegpu.HostCondition):
     def __init__(self):
         super().__init__()
 
@@ -1547,7 +1587,8 @@ class exit_condition_fn(pyflamegpu.HostFunctionConditionCallback):
             return pyflamegpu.EXIT
         return pyflamegpu.CONTINUE
 
-class exit_neighbourhood_fn(pyflamegpu.HostFunctionConditionCallback):
+
+class exit_neighbourhood_fn(pyflamegpu.HostCondition):
     def __init__(self):
         super().__init__()
 
@@ -1555,7 +1596,7 @@ class exit_neighbourhood_fn(pyflamegpu.HostFunctionConditionCallback):
         return pyflamegpu.EXIT
 
 
-class init_god_fn(pyflamegpu.HostFunctionCallback):
+class init_god_fn(pyflamegpu.HostFunction):
     def __init__(self):
         super().__init__()
 
@@ -1563,7 +1604,7 @@ class init_god_fn(pyflamegpu.HostFunctionCallback):
         pass
 
 
-class exit_god_fn(pyflamegpu.HostFunctionConditionCallback):
+class exit_god_fn(pyflamegpu.HostCondition):
     iterations: int = 0
     max_iterations: int = SPACES_WITHIN_RADIUS
 
@@ -1577,7 +1618,10 @@ class exit_god_fn(pyflamegpu.HostFunctionConditionCallback):
         if self.iterations < self.max_iterations:
             prisoner: pyflamegpu.HostAgentAPI = FLAMEGPU.agent("prisoner")
             # print(prisoner.count())
-            if prisoner.countUInt("agent_status", AGENT_STATUS_ATTEMPTING_REPRODUCTION) and overpopulated < 1:
+            if (
+                prisoner.countUInt("agent_status", AGENT_STATUS_ATTEMPTING_REPRODUCTION)
+                and overpopulated < 1
+            ):
                 return pyflamegpu.CONTINUE
         self.iterations = 0
         return pyflamegpu.EXIT
@@ -1596,13 +1640,18 @@ def make_core_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescr
     agent.newVariableUInt("agent_color")
     agent.newVariableArrayUInt8("agent_strategies", AGENT_TRAIT_COUNT)
     agent.newVariableUInt8("agent_strategy_id", 0)
-    agent.newVariableArrayID("neighbour_list", SPACES_WITHIN_RADIUS, [
-                             pyflamegpu.ID_NOT_SET] * SPACES_WITHIN_RADIUS)
-    agent.newVariableArrayFloat("neighbour_rolls", SPACES_WITHIN_RADIUS, [
-                                0.0] * SPACES_WITHIN_RADIUS)
+    agent.newVariableArrayID(
+        "neighbour_list",
+        SPACES_WITHIN_RADIUS,
+        [pyflamegpu.ID_NOT_SET] * SPACES_WITHIN_RADIUS,
+    )
+    agent.newVariableArrayFloat(
+        "neighbour_rolls", SPACES_WITHIN_RADIUS, [0.0] * SPACES_WITHIN_RADIUS
+    )
     # @TODO: flesh out? for now -1 = no neighbour, 0 = I respond, 1 = I challenge
     agent.newVariableArrayInt8(
-        "my_actions", SPACES_WITHIN_RADIUS, [-1] * SPACES_WITHIN_RADIUS)
+        "my_actions", SPACES_WITHIN_RADIUS, [-1] * SPACES_WITHIN_RADIUS
+    )
     agent.newVariableFloat("die_roll", 0.0)  # type: ignore
     agent.newVariableUInt("my_bucket", 0)
 
@@ -1616,10 +1665,14 @@ def make_core_agent(model: pyflamegpu.ModelDescription) -> pyflamegpu.AgentDescr
 
 
 def add_agent_memory(agent: pyflamegpu.AgentDescription):
-    agent.newVariableArrayID("game_memory", SPACES_WITHIN_RADIUS, [
-                             pyflamegpu.ID_NOT_SET] * SPACES_WITHIN_RADIUS)
-    agent.newVariableArrayUInt8("game_memory_choices", SPACES_WITHIN_RADIUS, [
-                                0] * SPACES_WITHIN_RADIUS)
+    agent.newVariableArrayID(
+        "game_memory",
+        SPACES_WITHIN_RADIUS,
+        [pyflamegpu.ID_NOT_SET] * SPACES_WITHIN_RADIUS,
+    )
+    agent.newVariableArrayUInt8(
+        "game_memory_choices", SPACES_WITHIN_RADIUS, [0] * SPACES_WITHIN_RADIUS
+    )
 
 
 def add_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
@@ -1628,7 +1681,9 @@ def add_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
     env.newPropertyUInt("agent_count", 0)
     env.newPropertyUInt8("overpopulated", 0)
     env.newPropertyFloat("env_noise", ENV_NOISE, isConst=True)
-    env.newPropertyUInt8("strategy_per_trait", 1 if AGENT_STRATEGY_PER_TRAIT else 0, isConst=True)
+    env.newPropertyUInt8(
+        "strategy_per_trait", 1 if AGENT_STRATEGY_PER_TRAIT else 0, isConst=True
+    )
     env.newPropertyUInt8("strategy_pure", 1 if AGENT_STRATEGY_PURE else 0, isConst=True)
 
 
@@ -1646,7 +1701,7 @@ def add_pdgame_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
     env.newPropertyFloat("payoff_cd", PAYOFF_CD, isConst=True)
     env.newPropertyFloat("payoff_dc", PAYOFF_DC, isConst=True)
     env.newPropertyFloat("payoff_dd", PAYOFF_DD, isConst=True)
-    
+
     env.newPropertyFloat("max_energy", MAX_ENERGY, isConst=True)
 
 
@@ -1663,32 +1718,28 @@ def add_movement_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
 
 def add_god_vars(agent: pyflamegpu.AgentDescription) -> None:
     agent.newVariableUInt("request_bucket", 0)
-    agent.newVariableUInt("last_reproduction_attempt",
-                          SPACES_WITHIN_RADIUS_INCL)
+    agent.newVariableUInt("last_reproduction_attempt", SPACES_WITHIN_RADIUS_INCL)
     agent.newVariableUInt("reproduce_sequence", 0)
     agent.newVariableUInt8("agents_spawned", 0)
 
 
 def add_neighbourhood_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
-    env.newPropertyFloat("reproduce_min_energy",
-                         REPRODUCE_MIN_ENERGY, isConst=True)
+    env.newPropertyFloat("reproduce_min_energy", REPRODUCE_MIN_ENERGY, isConst=True)
 
 
 def add_god_env_vars(env: pyflamegpu.EnvironmentDescription) -> None:
     env.newPropertyFloat("reproduce_cost", REPRODUCE_COST, isConst=True)
-    env.newPropertyFloat("reproduce_min_energy",
-                         REPRODUCE_MIN_ENERGY, isConst=True)
+    env.newPropertyFloat("reproduce_min_energy", REPRODUCE_MIN_ENERGY, isConst=True)
     env.newPropertyFloat("max_energy", MAX_ENERGY, isConst=True)
     env.newPropertyFloat("cost_of_living", COST_OF_LIVING, isConst=True)
     env.newPropertyFloat("init_energy_mu", INIT_ENERGY_MU, isConst=True)
     env.newPropertyFloat("init_energy_sigma", INIT_ENERGY_SIGMA, isConst=True)
     env.newPropertyFloat("init_energy_min", INIT_ENERGY_MIN, isConst=True)
+    env.newPropertyFloat("mutation_rate", AGENT_TRAIT_MUTATION_RATE, isConst=True)
     env.newPropertyFloat(
-        "mutation_rate", AGENT_TRAIT_MUTATION_RATE, isConst=True)
-    env.newPropertyFloat("reproduction_inheritence",
-                         REPRODUCTION_INHERITENCE, isConst=True)
-    env.newPropertyUInt8("max_children_per_step",
-                         MAX_CHILDREN_PER_STEP, isConst=True)
+        "reproduction_inheritence", REPRODUCTION_INHERITENCE, isConst=True
+    )
+    env.newPropertyUInt8("max_children_per_step", MAX_CHILDREN_PER_STEP, isConst=True)
     env.newPropertyUInt("max_agents", AGENT_HARD_LIMIT, isConst=True)
 
 
@@ -1697,8 +1748,11 @@ def _print_environment_properties() -> None:
     print(f"max agent count: {MAX_AGENT_SPACES}")
     print(f"random seed: {RANDOM_SEED}")
 
+
 # Define a method which when called will define the model, Create the simulation object and execute it.
-def configure_visualisation(simulation: pyflamegpu.CUDASimulation) -> pyflamegpu.ModelVis:
+def configure_visualisation(
+    simulation: pyflamegpu.CUDASimulation,
+) -> pyflamegpu.ModelVis:
     visualisation: pyflamegpu.ModelVis = simulation.getVisualisation()
     visualisation.setBeginPaused(PAUSE_AT_START)
     # Configure the visualiastion.
@@ -1707,7 +1761,7 @@ def configure_visualisation(simulation: pyflamegpu.CUDASimulation) -> pyflamegpu
     visualisation.setInitialCameraTarget(INIT_CAM, INIT_CAM, 0.0)
     visualisation.setCameraSpeed(VISUALISATION_CAMERA_SPEED)
     visualisation.setClearColor(*VISUALISATION_BG_RGB)
-    
+
     visualisation.setSimulationSpeed(SIMULATION_SPS_LIMIT)
 
     vis_agent: pyflamegpu.AgentVis = visualisation.addAgent("prisoner")
@@ -1722,7 +1776,10 @@ def configure_visualisation(simulation: pyflamegpu.CUDASimulation) -> pyflamegpu
     # Activate the visualisation.
     return visualisation
 
-def configure_simulation_single(model: pyflamegpu.ModelDescription, argv: list[str]) -> pyflamegpu.CUDASimulation:
+
+def configure_simulation_single(
+    model: pyflamegpu.ModelDescription, argv: list[str]
+) -> pyflamegpu.CUDASimulation:
     simulation: pyflamegpu.CUDASimulation = pyflamegpu.CUDASimulation(model)
     # set some simulation defaults
     if RANDOM_SEED is not None:
@@ -1737,21 +1794,27 @@ def configure_simulation_single(model: pyflamegpu.ModelDescription, argv: list[s
         # Seed the host RNG using the cuda simulations' RNG
         if RANDOM_SEED is not None:
             random.seed(simulation.SimulationConfig().random_seed)
-    
+
     return simulation
 
-def configure_ensemble(model: pyflamegpu.ModelDescription, argv: list[str]) -> pyflamegpu.CUDAEnsemble:
+
+def configure_ensemble(
+    model: pyflamegpu.ModelDescription, argv: list[str]
+) -> pyflamegpu.CUDAEnsemble:
     ensemble: pyflamegpu.CUDAEnsemble = pyflamegpu.CUDAEnsemble(model)
     ensemble.Config().out_directory = "data"
     ensemble.Config().out_format = "json"
 
     ensemble.initialise(argv)
-    
+
     return ensemble
+
 
 def configure_runplan(model: pyflamegpu.ModelDescription) -> pyflamegpu.RunPlanVector:
     # How man initial runs for each
-    runs_control: pyflamegpu.RunPlanVector = pyflamegpu.RunPlanVector(model, MULTI_RUN_COUNT)
+    runs_control: pyflamegpu.RunPlanVector = pyflamegpu.RunPlanVector(
+        model, MULTI_RUN_COUNT
+    )
     if RANDOM_SEED:
         # increment random seed by one each time
         runs_control.setRandomSimulationSeed(RANDOM_SEED, 1)
@@ -1763,87 +1826,103 @@ def configure_runplan(model: pyflamegpu.ModelDescription) -> pyflamegpu.RunPlanV
     # runs_control.setPropertyUniformDistributionFloat("lerp_float", 1.0, 128.0)
     for pure_stategy in [0, 1]:
         # [0, 0.1, 1, 2, 5]
-        for cost_of_living in [0.1, 0.3, 1, 2/3, 1.5, 1.666]:
-            runs_control.setOutputSubdirectory("pure%g_env_cost%g_%g_steps"%(pure_stategy, cost_of_living, MULTI_RUN_STEPS))
+        for cost_of_living in [0.1, 0.3, 1, 2 / 3, 1.5, 1.666]:
+            runs_control.setOutputSubdirectory(
+                "pure%g_env_cost%g_%g_steps"
+                % (pure_stategy, cost_of_living, MULTI_RUN_STEPS)
+            )
             runs_control.setPropertyUInt8("strategy_pure", pure_stategy)
             runs_control.setPropertyFloat("cost_of_living", cost_of_living)
             runs_control.setPropertyFloat("travel_cost", cost_of_living / 2)
             runs += runs_control
     return runs
 
+
 def main():
     _print_environment_properties()
     if pyflamegpu.SEATBELTS:
         print("Seatbelts are enabled, this will significantly impact performance.")
-        print("Buckle up if you are developing the model. Otherwise throw caution to the wind and use a pyflamegpu build without seatbelts.")
+        print(
+            "Buckle up if you are developing the model. Otherwise throw caution to the wind and use a pyflamegpu build without seatbelts."
+        )
     # Define the FLAME GPU model
     model: pyflamegpu.ModelDescription = pyflamegpu.ModelDescription(
-        "prisoners_dilemma")
+        "prisoners_dilemma"
+    )
 
     # Exit sim early if all agents die
-    model.addExitConditionCallback(exit_condition_fn().__disown__())
+    model.addExitCondition(exit_condition_fn().__disown__())
     env: pyflamegpu.EnvironmentDescription = model.Environment()
     add_env_vars(env)
     env.newPropertyFloat("cost_of_living", COST_OF_LIVING, isConst=True)
     env.newPropertyUInt("max_agents", AGENT_HARD_LIMIT, isConst=True)
     env.newPropertyFloat("max_energy", MAX_ENERGY, isConst=True)
-    #env.newPropertyArrayUInt("population_counts_step", [0] * POPULATION_COUNT_BINS)
+    # env.newPropertyArrayUInt("population_counts_step", [0] * POPULATION_COUNT_BINS)
     env.newPropertyArrayUInt("population_strat_count", [0] * POPULATION_COUNT_BINS)
     env.newPropertyFloat("travel_cost", AGENT_TRAVEL_COST, isConst=True)
 
-    model.addStepFunctionCallback(step_fn().__disown__())
+    model.addStepFunction(step_fn().__disown__())
     # create all agents here
-    model.addInitFunctionCallback(init_fn().__disown__())
+    model.addInitFunction(init_fn().__disown__())
 
     agent = make_core_agent(model)
 
     search_message: pyflamegpu.MessageBucket_Description = model.newMessageBucket(
-        "player_search_msg")
+        "player_search_msg"
+    )
     search_message.newVariableID("id")
     search_message.newVariableFloat("die_roll")
     search_message.setBounds(0, BUCKET_SIZE)
 
     agent_search_fn: pyflamegpu.AgentFunctionDescription = agent.newRTCFunction(
-        CUDA_SEARCH_FUNC_NAME, CUDA_SEARCH_FUNC)
+        CUDA_SEARCH_FUNC_NAME, CUDA_SEARCH_FUNC
+    )
     agent_search_fn.setMessageOutput("player_search_msg")
 
     agent_game_list_fn: pyflamegpu.AgentFunctionDescription = agent.newRTCFunction(
-        CUDA_GAME_LIST_FUNC_NAME, CUDA_GAME_LIST_FUNC)
+        CUDA_GAME_LIST_FUNC_NAME, CUDA_GAME_LIST_FUNC
+    )
     agent_game_list_fn.setMessageInput("player_search_msg")
 
-    agent_environmental_punishment_fn: pyflamegpu.AgentFunctionDescription = agent.newRTCFunction(
-        CUDA_ENVIRONMENTAL_PUNISHMENT_NAME, CUDA_ENVIRONMENTAL_PUNISHMENT_FUNCTION)
+    agent_environmental_punishment_fn: pyflamegpu.AgentFunctionDescription = (
+        agent.newRTCFunction(
+            CUDA_ENVIRONMENTAL_PUNISHMENT_NAME, CUDA_ENVIRONMENTAL_PUNISHMENT_FUNCTION
+        )
+    )
     agent_environmental_punishment_fn.setAllowAgentDeath(True)
     agent_environmental_punishment_fn.setRTCFunctionCondition(
-        CUDA_ENVIRONMENTAL_PUNISHMENT_CONDITION)
+        CUDA_ENVIRONMENTAL_PUNISHMENT_CONDITION
+    )
 
     # load agent-specific interactions
 
     # play resolution submodel
     pdgame_model: pyflamegpu.ModelDescription = pyflamegpu.ModelDescription(
-        "pdgame_model")
-    pdgame_model.addExitConditionCallback(exit_play_fn().__disown__())
+        "pdgame_model"
+    )
+    pdgame_model.addExitCondition(exit_play_fn().__disown__())
 
     # add message for game challenges
-    challenge_message: pyflamegpu.MessageBucket_Description = pdgame_model.newMessageBucket(
-        "player_challenge_msg")
+    challenge_message: pyflamegpu.MessageBucket_Description = (
+        pdgame_model.newMessageBucket("player_challenge_msg")
+    )
     challenge_message.newVariableID("challenger_id")
     challenge_message.newVariableID("responder_id")
-    challenge_message.newVariableArrayUInt8(
-        "challenger_strategies", AGENT_TRAIT_COUNT)
+    challenge_message.newVariableArrayUInt8("challenger_strategies", AGENT_TRAIT_COUNT)
     challenge_message.newVariableUInt8("challenger_trait")
     challenge_message.newVariableFloat("challenger_energy")
     challenge_message.newVariableFloat("challenger_roll")
     challenge_message.newVariableUInt("challenger_x")
     challenge_message.newVariableUInt("challenger_y")
     challenge_message.newVariableUInt("challenger_bucket")
-    
+
     challenge_message.newVariableID("challenger_game_memory_id")
     challenge_message.newVariableUInt8("challenger_game_memory_choice")
     challenge_message.setBounds(0, BUCKET_SIZE)
 
-    resolve_message: pyflamegpu.MessageBucket_Description = pdgame_model.newMessageBucket(
-        "play_resolve_msg")
+    resolve_message: pyflamegpu.MessageBucket_Description = (
+        pdgame_model.newMessageBucket("play_resolve_msg")
+    )
     resolve_message.newVariableID("challenger_id")
     resolve_message.newVariableID("responder_id")
     resolve_message.newVariableFloat("challenger_energy")
@@ -1857,27 +1936,34 @@ def main():
 
     # create the submodel
     pdgame_submodel: pyflamegpu.SubModelDescription = model.newSubModel(
-        "pdgame_model", pdgame_model)
-    pdgame_subagent: pyflamegpu.AgentDescription = make_core_agent(
-        pdgame_model)
+        "pdgame_model", pdgame_model
+    )
+    pdgame_subagent: pyflamegpu.AgentDescription = make_core_agent(pdgame_model)
     add_pdgame_vars(pdgame_subagent)
 
-    agent_challenge_fn: pyflamegpu.AgentFunctionDescription = pdgame_subagent.newRTCFunction(
-        CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME, CUDA_AGENT_PLAY_CHALLENGE_FUNC)
+    agent_challenge_fn: pyflamegpu.AgentFunctionDescription = (
+        pdgame_subagent.newRTCFunction(
+            CUDA_AGENT_PLAY_CHALLENGE_FUNC_NAME, CUDA_AGENT_PLAY_CHALLENGE_FUNC
+        )
+    )
     agent_challenge_fn.setMessageOutput("player_challenge_msg")
-    agent_challenge_fn.setRTCFunctionCondition(
-        CUDA_AGENT_PLAY_CHALLENGE_CONDITION)
+    agent_challenge_fn.setRTCFunctionCondition(CUDA_AGENT_PLAY_CHALLENGE_CONDITION)
 
-    agent_response_fn: pyflamegpu.AgentFunctionDescription = pdgame_subagent.newRTCFunction(
-        CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME, CUDA_AGENT_PLAY_RESPONSE_FUNC)
+    agent_response_fn: pyflamegpu.AgentFunctionDescription = (
+        pdgame_subagent.newRTCFunction(
+            CUDA_AGENT_PLAY_RESPONSE_FUNC_NAME, CUDA_AGENT_PLAY_RESPONSE_FUNC
+        )
+    )
     agent_response_fn.setMessageInput("player_challenge_msg")
-    agent_response_fn.setRTCFunctionCondition(
-        CUDA_AGENT_PLAY_RESPONSE_CONDITION)
+    agent_response_fn.setRTCFunctionCondition(CUDA_AGENT_PLAY_RESPONSE_CONDITION)
     agent_response_fn.setMessageOutput("play_resolve_msg")
     agent_response_fn.setAllowAgentDeath(True)
 
-    agent_resolve_fn: pyflamegpu.AgentFunctionDescription = pdgame_subagent.newRTCFunction(
-        CUDA_AGENT_PLAY_RESOLVE_FUNC_NAME, CUDA_AGENT_PLAY_RESOLVE_FUNC)
+    agent_resolve_fn: pyflamegpu.AgentFunctionDescription = (
+        pdgame_subagent.newRTCFunction(
+            CUDA_AGENT_PLAY_RESOLVE_FUNC_NAME, CUDA_AGENT_PLAY_RESOLVE_FUNC
+        )
+    )
     agent_resolve_fn.setMessageInput("play_resolve_msg")
     agent_resolve_fn.setRTCFunctionCondition(CUDA_AGENT_PLAY_RESOLVE_CONDITION)
     agent_resolve_fn.setAllowAgentDeath(True)
@@ -1893,11 +1979,13 @@ def main():
 
     # movement resolution submodel
     movement_model: pyflamegpu.ModelDescription = pyflamegpu.ModelDescription(
-        "movement_model")
-    movement_model.addExitConditionCallback(exit_move_fn().__disown__())
+        "movement_model"
+    )
+    movement_model.addExitCondition(exit_move_fn().__disown__())
 
-    move_request_msg: pyflamegpu.MessageBucket_Description = movement_model.newMessageBucket(
-        "agent_move_request_msg")
+    move_request_msg: pyflamegpu.MessageBucket_Description = (
+        movement_model.newMessageBucket("agent_move_request_msg")
+    )
     move_request_msg.newVariableID("requester_id")
     move_request_msg.newVariableFloat("requester_roll")
     move_request_msg.newVariableUInt("requested_x")
@@ -1910,24 +1998,28 @@ def main():
     add_movement_env_vars(movement_env)
 
     movement_submodel: pyflamegpu.SubModelDescription = model.newSubModel(
-        "movement_model", movement_model)
-    movement_subagent: pyflamegpu.AgentDescription = make_core_agent(
-        movement_model)
+        "movement_model", movement_model
+    )
+    movement_subagent: pyflamegpu.AgentDescription = make_core_agent(movement_model)
     add_movement_vars(movement_subagent)
 
-    agent_move_request_fn: pyflamegpu.AgentFunctionDescription = movement_subagent.newRTCFunction(
-        CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME, CUDA_AGENT_MOVE_REQUEST_FUNCTION)
+    agent_move_request_fn: pyflamegpu.AgentFunctionDescription = (
+        movement_subagent.newRTCFunction(
+            CUDA_AGENT_MOVE_REQUEST_FUNCTION_NAME, CUDA_AGENT_MOVE_REQUEST_FUNCTION
+        )
+    )
     agent_move_request_fn.setMessageOutput("agent_move_request_msg")
-    agent_move_request_fn.setRTCFunctionCondition(
-        CUDA_AGENT_MOVE_REQUEST_CONDITION)
+    agent_move_request_fn.setRTCFunctionCondition(CUDA_AGENT_MOVE_REQUEST_CONDITION)
     # Agents can die if they should travel, but don't have enough energy to do so
     agent_move_request_fn.setAllowAgentDeath(True)
 
-    agent_move_response_fn: pyflamegpu.AgentFunctionDescription = movement_subagent.newRTCFunction(
-        CUDA_AGENT_MOVE_RESPONSE_FUNCTION_NAME, CUDA_AGENT_MOVE_RESPONSE_FUNCTION)
+    agent_move_response_fn: pyflamegpu.AgentFunctionDescription = (
+        movement_subagent.newRTCFunction(
+            CUDA_AGENT_MOVE_RESPONSE_FUNCTION_NAME, CUDA_AGENT_MOVE_RESPONSE_FUNCTION
+        )
+    )
     agent_move_response_fn.setMessageInput("agent_move_request_msg")
-    agent_move_response_fn.setRTCFunctionCondition(
-        CUDA_AGENT_MOVE_RESPONSE_CONDITION)
+    agent_move_response_fn.setRTCFunctionCondition(CUDA_AGENT_MOVE_RESPONSE_CONDITION)
 
     movement_submodel.bindAgent("prisoner", "prisoner", auto_map_vars=True)
 
@@ -1939,57 +2031,70 @@ def main():
 
     # update neighbours submodel
     neighbourhood_model: pyflamegpu.ModelDescription = pyflamegpu.ModelDescription(
-        "neighbourhood_model")
-    neighbourhood_model.addExitConditionCallback(
-        exit_neighbourhood_fn().__disown__())
+        "neighbourhood_model"
+    )
+    neighbourhood_model.addExitCondition(exit_neighbourhood_fn().__disown__())
 
-    neighbourhood_broadcast_msg: pyflamegpu.MessageBucket_Description = neighbourhood_model.newMessageBucket(
-        "neighbourhood_broadcast_msg")
+    neighbourhood_broadcast_msg: pyflamegpu.MessageBucket_Description = (
+        neighbourhood_model.newMessageBucket("neighbourhood_broadcast_msg")
+    )
     neighbourhood_broadcast_msg.newVariableID("id")
     neighbourhood_broadcast_msg.setBounds(0, BUCKET_SIZE)
 
-    neighbourhood_env: pyflamegpu.EnvironmentDescription = neighbourhood_model.Environment()
+    neighbourhood_env: pyflamegpu.EnvironmentDescription = (
+        neighbourhood_model.Environment()
+    )
     add_env_vars(neighbourhood_env)
     add_neighbourhood_env_vars(neighbourhood_env)
     neighbourhood_submodel: pyflamegpu.SubModelDescription = model.newSubModel(
-        "neighbourhood_model", neighbourhood_model)
+        "neighbourhood_model", neighbourhood_model
+    )
     neighbourhood_subagent: pyflamegpu.AgentDescription = make_core_agent(
-        neighbourhood_model)
+        neighbourhood_model
+    )
 
-    agent_neighbourhood_broadcast_fn: pyflamegpu.AgentFunctionDescription = neighbourhood_subagent.newRTCFunction(
-        CUDA_AGENT_NEIGHBOURHOOD_BROADCAST_FUNCTION_NAME, CUDA_AGENT_NEIGHBOURHOOD_BROADCAST_FUNCTION)
-    agent_neighbourhood_broadcast_fn.setMessageOutput(
-        "neighbourhood_broadcast_msg")
+    agent_neighbourhood_broadcast_fn: pyflamegpu.AgentFunctionDescription = (
+        neighbourhood_subagent.newRTCFunction(
+            CUDA_AGENT_NEIGHBOURHOOD_BROADCAST_FUNCTION_NAME,
+            CUDA_AGENT_NEIGHBOURHOOD_BROADCAST_FUNCTION,
+        )
+    )
+    agent_neighbourhood_broadcast_fn.setMessageOutput("neighbourhood_broadcast_msg")
 
-    agent_neighbourhood_update_fn: pyflamegpu.AgentFunctionDescription = neighbourhood_subagent.newRTCFunction(
-        CUDA_AGENT_NEIGHBOURHOOD_UPDATE_FUNCTION_NAME, CUDA_AGENT_NEIGHBOURHOOD_UPDATE_FUNCTION)
-    agent_neighbourhood_update_fn.setMessageInput(
-        "neighbourhood_broadcast_msg")
+    agent_neighbourhood_update_fn: pyflamegpu.AgentFunctionDescription = (
+        neighbourhood_subagent.newRTCFunction(
+            CUDA_AGENT_NEIGHBOURHOOD_UPDATE_FUNCTION_NAME,
+            CUDA_AGENT_NEIGHBOURHOOD_UPDATE_FUNCTION,
+        )
+    )
+    agent_neighbourhood_update_fn.setMessageInput("neighbourhood_broadcast_msg")
     # only need to update agents who could reproduce, hence the condition
     agent_neighbourhood_update_fn.setRTCFunctionCondition(
-        CUDA_AGENT_NEIGHBOURHOOD_UPDATE_CONDITION)
+        CUDA_AGENT_NEIGHBOURHOOD_UPDATE_CONDITION
+    )
 
-    neighbourhood_submodel.bindAgent(
-        "prisoner", "prisoner", auto_map_vars=True)
+    neighbourhood_submodel.bindAgent("prisoner", "prisoner", auto_map_vars=True)
 
-    neighbourhood_submodel_layer1: pyflamegpu.LayerDescription = neighbourhood_model.newLayer()
-    neighbourhood_submodel_layer1.addAgentFunction(
-        agent_neighbourhood_broadcast_fn)
+    neighbourhood_submodel_layer1: pyflamegpu.LayerDescription = (
+        neighbourhood_model.newLayer()
+    )
+    neighbourhood_submodel_layer1.addAgentFunction(agent_neighbourhood_broadcast_fn)
 
-    neighbourhood_submodel_layer2: pyflamegpu.LayerDescription = neighbourhood_model.newLayer()
-    neighbourhood_submodel_layer2.addAgentFunction(
-        agent_neighbourhood_update_fn)
+    neighbourhood_submodel_layer2: pyflamegpu.LayerDescription = (
+        neighbourhood_model.newLayer()
+    )
+    neighbourhood_submodel_layer2.addAgentFunction(agent_neighbourhood_update_fn)
 
     # god submodel, asexual reproduction, and environmental slaughter
-    god_model: pyflamegpu.ModelDescription = pyflamegpu.ModelDescription(
-        "god_model")
+    god_model: pyflamegpu.ModelDescription = pyflamegpu.ModelDescription("god_model")
     # only attempt reproduction if there are agents with the right status
     # AND the current count of agents is less than the maximum
-    god_model.addInitFunctionCallback(init_god_fn().__disown__())
-    god_model.addExitConditionCallback(exit_god_fn().__disown__())
+    god_model.addInitFunction(init_god_fn().__disown__())
+    god_model.addExitCondition(exit_god_fn().__disown__())
 
     god_go_forth_msg: pyflamegpu.MessageBucket_Description = god_model.newMessageBucket(
-        "god_go_forth_msg")
+        "god_go_forth_msg"
+    )
     god_go_forth_msg.newVariableID("id")
     god_go_forth_msg.newVariableUInt("requested_x")
     god_go_forth_msg.newVariableUInt("requested_y")
@@ -2000,22 +2105,27 @@ def main():
     add_env_vars(god_env)
     add_god_env_vars(god_env)
     god_submodel: pyflamegpu.SubModelDescription = model.newSubModel(
-        "god_model", god_model)
+        "god_model", god_model
+    )
     god_subagent: pyflamegpu.AgentDescription = make_core_agent(god_model)
     add_god_vars(god_subagent)
 
-    agent_god_go_forth_fn: pyflamegpu.AgentFunctionDescription = god_subagent.newRTCFunction(
-        CUDA_AGENT_GOD_GO_FORTH_FUNCTION_NAME, CUDA_AGENT_GOD_GO_FORTH_FUNCTION)
+    agent_god_go_forth_fn: pyflamegpu.AgentFunctionDescription = (
+        god_subagent.newRTCFunction(
+            CUDA_AGENT_GOD_GO_FORTH_FUNCTION_NAME, CUDA_AGENT_GOD_GO_FORTH_FUNCTION
+        )
+    )
 
     agent_god_go_forth_fn.setMessageOutput("god_go_forth_msg")
-    agent_god_go_forth_fn.setRTCFunctionCondition(
-        CUDA_AGENT_GOD_GO_FORTH_CONDITION)
+    agent_god_go_forth_fn.setRTCFunctionCondition(CUDA_AGENT_GOD_GO_FORTH_CONDITION)
 
-    agent_god_multiply_fn: pyflamegpu.AgentFunctionDescription = god_subagent.newRTCFunction(
-        CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME, CUDA_AGENT_GOD_MULTIPLY_FUNCTION)
+    agent_god_multiply_fn: pyflamegpu.AgentFunctionDescription = (
+        god_subagent.newRTCFunction(
+            CUDA_AGENT_GOD_MULTIPLY_FUNCTION_NAME, CUDA_AGENT_GOD_MULTIPLY_FUNCTION
+        )
+    )
     agent_god_multiply_fn.setMessageInput("god_go_forth_msg")
-    agent_god_multiply_fn.setRTCFunctionCondition(
-        CUDA_AGENT_GOD_MULTIPLY_CONDITION)
+    agent_god_multiply_fn.setRTCFunctionCondition(CUDA_AGENT_GOD_MULTIPLY_CONDITION)
     agent_god_multiply_fn.setAgentOutput(god_subagent)
 
     god_submodel.bindAgent("prisoner", "prisoner", auto_map_vars=True)
@@ -2065,7 +2175,7 @@ def main():
         print("Running simulation...")
         simulation.simulate()
         if USE_VISUALISATION:
-            visualisation.join() #type: ignore
+            visualisation.join()  # type: ignore
     else:
         print("Configuring CUDAEnsemble...")
         ensemble = configure_ensemble(model, sys.argv)
@@ -2076,6 +2186,7 @@ def main():
         runs = configure_runplan(model)
         print("Running simulation...")
         ensemble.simulate(runs)
+
 
 if __name__ == "__main__":
     main()
