@@ -48,11 +48,20 @@ Any agents that drop below zero energy die.
 
 ### Prerequisites
 
+- python (tested on 3.11)
 - CUDA Capable GPU
 - Windows or Linux (not sure about FLAMEGPU2 mac support, might be possible to compile it)
 - NVIDIA CUDA
 - [pyflamegpu](https://github.com/FLAMEGPU/FLAMEGPU2/releases), [version 2.0.0-rc](https://github.com/FLAMEGPU/FLAMEGPU2/releases/tag/v2.0.0-rc) (or higher), either built from source with whichever CUDA version you like, or download a pip wheel that matches your system
 - [numpy](https://numpy.org/) (for initial agent matrix positioning, I'll see if I can remove this requirement later because it's clearly adding huge overhead)
+
+Numpy is included in [requirements.txt](requirements.txt):
+
+```python
+git clone https://github.com/zeyus/FLAMEGPU2-Prisoners-Dilemma-ABM.git
+cd FLAMEGPU2-Prisoners-Dilemma-ABM
+python3 -m pip install -r requirements.txt
+```
 
 ### Try it out
 
