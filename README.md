@@ -2,7 +2,7 @@
 
 ## What is it?
 
-A 2D ABM simulation executed on the GPU. This ABM models interactions of "games" between agents, specifically the Prisoner's Dilemma game, in which participants can either cooperate or defect, resulting in a payoff, depending on the combination of decisions.
+A (3D) 2D ABM simulation executed on the GPU. This ABM models interactions of "games" between agents, specifically the Prisoner's Dilemma game, in which participants can either cooperate or defect, resulting in a payoff, depending on the combination of decisions.
 
 Using [FLAMEGPU2](https://github.com/FLAMEGPU/FLAMEGPU2), agent counts can go into the millions without a problem, especially on a decent GPU.
 
