@@ -51,7 +51,7 @@ Any agents that drop below zero energy die.
 - CUDA Capable GPU
 - Windows or Linux (not sure about FLAMEGPU2 mac support, might be possible to compile it)
 - NVIDIA CUDA
-- [pyflamegpu](https://github.com/FLAMEGPU/FLAMEGPU2/releases), either built from source with whichever CUDA version you like, or download a pip wheel that matches your system
+- [pyflamegpu](https://github.com/FLAMEGPU/FLAMEGPU2/releases), [version 2.0.0-rc](https://github.com/FLAMEGPU/FLAMEGPU2/releases/tag/v2.0.0-rc) (or higher), either built from source with whichever CUDA version you like, or download a pip wheel that matches your system
 - [numpy](https://numpy.org/) (for initial agent matrix positioning, I'll see if I can remove this requirement later because it's clearly adding huge overhead)
 
 ### Try it out
